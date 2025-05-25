@@ -2,7 +2,7 @@
 
 ## 🎓 Projeto Acadêmico
 
-CineLog é uma aplicação web para amantes de cinema catalogarem, avaliarem e compartilharem suas opiniões sobre filmes. Desenvolvida como projeto acadêmico para a disciplina de **Desenvolvimento Web 2** do **Professor Renan Cavichi** no curso de **Análise e Desenvolvimento de Sistemas do IFSP**.
+CineLog é uma aplicação web para amantes de cinema catalogarem, avaliarem e compartilharem suas opiniões sobre filmes. Desenvolvida como projeto acadêmico para a disciplina de **Desenvolvimento Web 2** do **Professor Renan Cavichi** (@renancavichi) no curso de **Análise e Desenvolvimento de Sistemas do IFSP**.
 
 Inspirado na plataforma [Letterboxd](https://letterboxd.com/), o CineLog permite que usuários criem uma coleção pessoal de filmes assistidos, atribuam notas, escrevam comentários e vejam avaliações de outros usuários, porém com sua própria identidade e características adaptadas ao contexto acadêmico.
 
