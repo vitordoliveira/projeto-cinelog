@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+  relationMode = "foreignKeys" 
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  password      String
+  role          String   @default("USER") // Novo campo para role do usuário (USER ou ADMIN)
+  avatarUrl     String?
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+  reviews       Review[]
+  addedMovies   Movie[]
+}
+
+model Movie {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String   @db.VarChar(1200)
+  releaseYear   Int
+  imageUrl      String?
+  genre         String?
+  director      String?
+  reviews       Review[]
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+
+  addedBy       User     @relation(fields: [addedByUserId], references: [id])
+  addedByUserId Int
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  rating    Int
+  comment   String
+  movie     Movie    @relation(fields: [movieId], references: [id])
+  movieId   Int
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+}

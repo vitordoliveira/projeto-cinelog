@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineLog</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Optional: Add a favicon -->
+    <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
+</head>
+<body>
+    <!-- Notification Container (used by utils.js showNotification) -->
+    <div id="notification-container"></div>
+
+    <main>
+        <!-- Movie Grid Container -->
+        <section id="movie-grid" class="grid">
+            <!-- Movie cards will be rendered here by JavaScript -->
+            <p class="message info">Carregando filmes...</p> <!-- Loading message -->
+        </section>
+
+        <!-- Pagination Container -->
+        <div id="pagination" class="pagination">
+            <!-- Pagination buttons and info will be rendered here by JavaScript -->
+        </div>
+    </main>
+
+    <!-- Scripts - ORDEM SIMPLIFICADA -->
+    <script type="module" src="./js/utils.js"></script>
+    <script type="module" src="./js/auth.js"></script>
+    <script type="module">
+        // Importa a função initializeNavbar
+        import { initializeNavbar } from './js/components.js';
+        
+        // Flag para controlar se a navbar já foi inicializada
+        window.navbarInitialized = false;
+        
+        // Função que garante que a navbar seja inicializada apenas uma vez
+        function setupNavbar() {
+            if (window.navbarInitialized) return;
+            
+            console.log('Inicializando navbar...');
+            window.navbarInitialized = true;
+            initializeNavbar();
+            
+            // Após inicializar a navbar, importa authService e atualiza a UI
+            import('./js/auth.js').then(module => {
+                module.authService.updateAuthUI();
+                console.log('UI atualizada após navbar ser criada');
+            });
+        }
+        
+        // Aguarda o evento de inicialização do auth
+        window.addEventListener('auth-initialized', setupNavbar);
+    </script>
+    <script type="module" src="./js/main.js"></script>
+    <script type="module" src="./js/ui.js"></script>
+</body>
+</html>
