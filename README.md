@@ -1,10 +1,5 @@
 # CineLog
 
-<div align="center">
-  <img src="public/images/logo.png" alt="CineLog Logo" width="200">
-  <h3>Sua plataforma para catalogar e compartilhar experiências cinematográficas</h3>
-</div>
-
 ## 📖 Sobre o Projeto
 
 CineLog é uma aplicação web para amantes de cinema catalogarem, avaliarem e compartilharem suas opiniões sobre filmes. Desenvolvida como projeto acadêmico para a disciplina de **Desenvolvimento Web 2** do **Professor Renan Cavichi** no curso de **Análise e Desenvolvimento de Sistemas do IFSP**.
