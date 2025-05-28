@@ -1,89 +1,87 @@
 # CineLog
 
-## 🎓 Projeto Acadêmico
+## 🎓 Academic Project
 
-CineLog é uma aplicação web para amantes de cinema catalogarem, avaliarem e compartilharem suas opiniões sobre filmes. Desenvolvida como projeto acadêmico para a disciplina de **Desenvolvimento Web 2** do **Professor Renan Cavichi** (@renancavichi) no curso de **Análise e Desenvolvimento de Sistemas do IFSP**.
+CineLog is a web application for movie enthusiasts to catalog, rate, and share their opinions about films. Developed as an academic project for the **Web Development 2** course taught by **Professor Renan Cavichi** (@renancavichi) in the **Analysis and Systems Development program at IFSP**.
 
-Inspirado na plataforma [Letterboxd](https://letterboxd.com/), o CineLog permite que usuários criem uma coleção pessoal de filmes assistidos, atribuam notas, escrevam comentários e vejam avaliações de outros usuários, porém com sua própria identidade e características adaptadas ao contexto acadêmico.
+Inspired by the [Letterboxd](https://letterboxd.com/) platform, CineLog allows users to create a personal collection of watched movies, assign ratings, write comments, and view other users' reviews, but with its own identity and features adapted to the academic context.
 
-## 🗂️ Estrutura do Projeto
-Este repositório utiliza uma estrutura de monorepo contendo:
+## 🗂️ Project Structure
+This repository uses a monorepo structure containing:
 
-- `/backend` - API REST construída com Node.js, Express e Prisma
-- `/frontend` - Interface de usuário construída com HTML, CSS e JavaScript Vanilla
+- `/backend` - REST API built with Node.js, Express, and Prisma
+- `/frontend` - User interface built with HTML, CSS, and Vanilla JavaScript
 
-## 🚀 Como Executar o Projeto
+## 🚀 How to Run the Project
 
 ### Backend
 ```bash
-# Entrar na pasta backend
+# Enter the backend folder
 cd backend
 
-# Instalar dependências
+# Install dependencies
 npm install
 
-# Configurar variáveis de ambiente
+# Configure environment variables
 cp .env.example .env
-# Edite o arquivo .env com suas configurações
+# Edit the .env file with your settings
 
-# Executar migrações do banco de dados
+# Run database migrations
 npx prisma migrate dev
 
-# Iniciar o servidor
+# Start the server
 npm start
 ```
 
 ### Frontend
 ```bash
-# Entrar na pasta frontend
+# Enter the frontend folder
 cd frontend
 
-# Abrir o arquivo index.html em seu navegador
-# ou utilizar uma extensão como Live Server no VS Code
+# Open the index.html file in your browser
+# or use an extension like Live Server in VS Code
 ```
 
-## ✨ Funcionalidades Principais
-### Para Usuários
-- **Conta e Perfil**: Registro, login e personalização com avatar
-- **Gerenciamento de Filmes**: Adicionar, editar e visualizar detalhes de filmes
-- **Sistema de Avaliação**: Atribuir notas de 1 a 5 estrelas e escrever comentários
-- **Interação Social**: Ver avaliações de outros usuários
+## ✨ Main Features
+### For Users
+- **Account and Profile**: Registration, login, and personalization with avatar
+- **Movie Management**: Add, edit, and view movie details
+- **Rating System**: Assign ratings from 1 to 5 stars and write comments
+- **Social Interaction**: View reviews from other users
 
-### Para Administradores
-- **Painel de Controle**: Visão geral das atividades na plataforma
-- **Gestão de Usuários**: Promover, rebaixar ou banir usuários
-- **Moderação de Conteúdo**: Revisar e remover avaliações inadequadas
-- **Catálogo de Filmes**: Gerenciar a base de filmes disponíveis
-- **Estatísticas**: Acompanhar métricas de uso da plataforma
+### For Administrators
+- **Control Panel**: Overview of platform activities
+- **User Management**: Promote, demote, or ban users
+- **Content Moderation**: Review and remove inappropriate reviews
+- **Movie Catalog**: Manage the available movie database
+- **Statistics**: Track platform usage metrics
 
-## 🛠️ Tecnologias Utilizadas
+## 🛠️ Technologies Used
 ### Frontend
 - HTML5, CSS3, JavaScript (ES6+)
-- Design responsivo com CSS Grid e Flexbox
-- FontAwesome para ícones
-- JavaScript Vanilla para interatividade e manipulação do DOM
+- Responsive design with CSS Grid and Flexbox
+- FontAwesome for icons
+- Vanilla JavaScript for interactivity and DOM manipulation
 
 ### Backend
 - Node.js
 - Express.js
 - Prisma ORM
-- MySQL (banco de dados)
-- Bcrypt (hash de senhas)
-- JSON Web Token (autenticação)
+- MySQL (database)
+- Bcrypt (password hashing)
+- JSON Web Token (authentication)
 
-### Serviços Externos
-- Cloudinary (armazenamento de imagens)
+### External Services
+- Cloudinary (image storage)
 
-## 🔍 Características Técnicas
-- **Design Responsivo**: Interface adaptada para dispositivos móveis e desktop
-- **Tema Escuro**: Design elegante e agradável para os olhos
-- **Segurança**: Proteção de senhas e validação de dados
-- **Performance**: Carregamento otimizado de imagens via Cloudinary
-- **Feedback Visual**: Notificações e indicadores de carregamento
-- **Compatibilidade**: Suporte aos principais navegadores
-- **Acessibilidade**: Elementos básicos de acessibilidade implementados
+## 🔍 Technical Features
+- **Responsive Design**: Interface adapted for mobile and desktop devices
+- **Dark Theme**: Elegant design that's easy on the eyes
+- **Security**: Password protection and data validation
+- **Performance**: Optimized image loading via Cloudinary
+- **Visual Feedback**: Notifications and loading indicators
+- **Compatibility**: Support for major browsers
+- **Accessibility**: Basic accessibility elements implemented
 
-## 👨‍💻 Autor
+## 👨‍💻 Author
 Vitor de Oliveira
-
-
