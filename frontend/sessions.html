@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Sessões - CineLog</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .sessions-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+        }
+
+        .session-card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-info {
+            flex-grow: 1;
+        }
+
+        .session-device {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .session-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .session-actions {
+            margin-left: 1rem;
+        }
+
+        .current-session {
+            border: 2px solid var(--primary-color);
+        }
+
+        .terminate-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .terminate-btn:hover {
+            background-color: var(--danger-color-dark);
+        }
+
+        .terminate-all-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .no-sessions {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Include your header/nav here -->
+    <nav class="navbar">
+        <!-- Your existing navigation -->
+    </nav>
+
+    <main class="sessions-container">
+        <h1>Gerenciar Sessões</h1>
+        <p>Veja e gerencie todos os dispositivos conectados à sua conta.</p>
+
+        <div id="sessions-list">
+            <!-- Sessions will be loaded here -->
+            <div class="loading">Carregando sessões...</div>
+        </div>
+
+        <button id="terminate-all" class="terminate-all-btn">
+            Encerrar Todas as Sessões
+        </button>
+    </main>
+
+    <script type="module" src="js/sessions.js"></script>
+</body>
+</html>
