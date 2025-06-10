@@ -1,22 +1,34 @@
-// controllers/movie/createMovieController.js
-import { createMovie } from '../../models/movieModel.js';
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
-// Possivelmente você terá um schema Zod para validação aqui também,
-// mas vamos focar na passagem do userId por enquanto.
+import { createMovie } from '../../models/movieModel.js';
 
 export default asyncHandler(async (req, res) => {
-  // O middleware 'auth' anexa o usuário logado em req.user
-  // Certifique-se de que este controlador está usando o middleware 'auth' na rota.
-  const userId = req.user.id; // Obtém o ID do usuário logado
+  const userId = req.user.id;
 
-  // Combina os dados do corpo da requisição com o userId
+  // Verificar se há dados
+  if (!req.body) {
+    return res.status(400).json({ 
+      error: 'Dados do filme não fornecidos' 
+    });
+  }
+
+  // Garantir que releaseYear é um número
   const movieData = {
     ...req.body,
-    addedByUserId: userId // Inclui o userId do usuário logado
+    releaseYear: parseInt(req.body.releaseYear),
+    addedByUserId: userId
   };
 
-  // Chama a função do modelo passando os dados completos
-  const movie = await createMovie(movieData);
-
-  res.status(201).json({ movie });
+  try {
+    const movie = await createMovie(movieData);
+    res.status(201).json({ 
+      message: 'Filme criado com sucesso',
+      movie 
+    });
+  } catch (error) {
+    console.error('Erro ao criar filme:', error);
+    res.status(500).json({ 
+      error: 'Erro ao criar filme',
+      details: error.message
+    });
+  }
 });

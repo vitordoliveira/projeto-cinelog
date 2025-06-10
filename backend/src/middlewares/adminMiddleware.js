@@ -1,21 +1,26 @@
-// src/middlewares/adminMiddleware.js
-import { asyncHandler } from './asyncHandler.js';
+// middlewares/adminMiddleware.js
+import { PrismaClient } from '@prisma/client';
 
-export const isAdmin = asyncHandler(async (req, res, next) => {
-  // O middleware auth deve ser executado antes deste
-  if (!req.user) {
-    return res.status(401).json({ 
-      error: 'Autenticação necessária' 
+const prisma = new PrismaClient();
+
+export const isAdmin = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'Não autorizado' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
     });
+
+    // Correção: verificar role ao invés de isAdmin
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: 'Acesso proibido - somente administradores' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Erro ao verificar permissões de administrador:', error);
+    res.status(500).json({ message: 'Erro ao verificar permissões de administrador' });
   }
-  
-  // Verificar se o usuário tem a role de ADMIN
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ 
-      error: 'Acesso negado. Esta funcionalidade requer privilégios de administrador.' 
-    });
-  }
-  
-  // Se chegou até aqui, o usuário é admin
-  next();
-});
+};

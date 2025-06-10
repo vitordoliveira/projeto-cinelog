@@ -1,437 +1,479 @@
 // js/auth.js
-
-// Importa funções utilitárias
 import { showNotification, handleApiError } from './utils.js';
 
-// Define a URL base da API
-const API = 'http://localhost:3000';
+// Configuração da API
+const API = 'http://localhost:3000/api';
+
+// Configuração padrão para fetch
+const fetchConfig = {
+  credentials: 'include',
+  mode: 'cors',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+};
 
 // Estado de autenticação global
 const authState = {
   currentUser: null,
   isAuthenticated: false,
-  token: null
+  accessToken: null,
+  refreshToken: null,
+  sessionId: null,
+  deviceInfo: null
 };
 
-// --- Serviço de Autenticação ---
+// Função para obter informações do dispositivo
+const getDeviceInfo = () => {
+  const ua = navigator.userAgent;
+  const browser = (function() {
+    if (ua.includes('Chrome')) return 'Chrome';
+    if (ua.includes('Firefox')) return 'Firefox';
+    if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+    if (ua.includes('Edge')) return 'Edge';
+    if (ua.includes('MSIE') || ua.includes('Trident/')) return 'Internet Explorer';
+    return 'Unknown Browser';
+  })();
+
+  const os = (function() {
+    if (ua.includes('Windows')) return 'Windows';
+    if (ua.includes('Mac OS')) return 'macOS';
+    if (ua.includes('Linux')) return 'Linux';
+    if (ua.includes('Android')) return 'Android';
+    if (ua.includes('iOS')) return 'iOS';
+    return 'Unknown OS';
+  })();
+
+  return `${browser} em ${os}`;
+};
+
+// Função para atualizar tokens
+const refreshTokens = async () => {
+  try {
+    const response = await fetch(`${API}/users/refresh`, {
+      method: 'POST',
+      ...fetchConfig,
+      headers: {
+        ...fetchConfig.headers,
+        'Authorization': `Bearer ${authState.accessToken}`,
+        'X-Refresh-Token': authState.refreshToken,
+        'X-Session-Id': authState.sessionId,
+        'User-Agent': navigator.userAgent
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Falha ao atualizar tokens');
+    }
+
+    const data = await response.json();
+    authState.accessToken = data.accessToken;
+
+    // Atualizar localStorage
+    const savedAuth = JSON.parse(localStorage.getItem('auth')) || {};
+    savedAuth.accessToken = data.accessToken;
+    localStorage.setItem('auth', JSON.stringify(savedAuth));
+
+    return data.accessToken;
+  } catch (error) {
+    console.error('[Refresh Token Error]', error);
+    authService.logout();
+    throw error;
+  }
+};
+
+// Função helper para requisições autenticadas
+const fetchWithAuth = async (url, options = {}) => {
+  try {
+    const token = authService.getAccessToken();
+    const headers = {
+      ...fetchConfig.headers,
+      ...options.headers,
+      'User-Agent': navigator.userAgent
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (authState.refreshToken) {
+      headers['X-Refresh-Token'] = authState.refreshToken;
+    }
+
+    if (authState.sessionId) {
+      headers['X-Session-Id'] = authState.sessionId;
+    }
+
+    console.log(`[Fetch] ${options.method || 'GET'} ${url}`);
+
+    const config = {
+      ...fetchConfig,
+      ...options,
+      headers
+    };
+
+    // Para upload de arquivos, não incluir Content-Type
+    if (options.body instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
+    let response = await fetch(url, config);
+    
+    // Verificar se precisamos atualizar o access token
+    if (response.status === 401 && authState.refreshToken) {
+      const newAccessToken = await refreshTokens();
+      
+      // Tentar novamente com o novo token
+      config.headers['Authorization'] = `Bearer ${newAccessToken}`;
+      response = await fetch(url, config);
+    }
+
+    // Verificar header de novo access token
+    const newAccessToken = response.headers.get('X-New-Access-Token');
+    if (newAccessToken) {
+      authState.accessToken = newAccessToken;
+      const savedAuth = JSON.parse(localStorage.getItem('auth')) || {};
+      savedAuth.accessToken = newAccessToken;
+      localStorage.setItem('auth', JSON.stringify(savedAuth));
+    }
+    
+    console.log(`[Response] Status: ${response.status} ${response.statusText}`);
+    
+    return response;
+  } catch (error) {
+    console.error('[Fetch Error]', error);
+    throw error;
+  }
+};
+
 export const authService = {
   get authState() {
     return { ...authState };
   },
 
-  getToken() {
-    // Se já temos um token em memória, retorna-o
-    if (authState.token) {
-      return authState.token;
-    }
-    
-    // Se não temos token na memória, tente renovar assincronamente
-    console.log("Não há token na memória, tentando renovar...");
-    this.refreshToken().catch(err => {
-      console.error("Falha ao renovar token:", err);
-    });
-    
-    // Retorna o token atual (pode ser null até que refreshToken complete)
-    return authState.token;
+  getAccessToken() {
+    return authState.accessToken || JSON.parse(localStorage.getItem('auth'))?.accessToken;
+  },
+
+  getRefreshToken() {
+    return authState.refreshToken || JSON.parse(localStorage.getItem('auth'))?.refreshToken;
   },
 
   isAuthenticated() {
-    return authState.isAuthenticated;
+    return !!this.getAccessToken();
   },
 
-  // Nova função: Verifica se o usuário é admin
   isAdmin() {
-    const userRole = authState.currentUser?.role;
-    const result = userRole === 'ADMIN';
-    return result;
+    return authState.currentUser?.role === 'ADMIN';
   },
 
-  // Função auxiliar para debug de token
-  debugToken() {
-    const token = this.getToken();
-    const tokenStatus = token ? 
-      `presente (${token.substring(0, 10)}...${token.substring(token.length - 5)})` : 
-      'ausente';
-    
-    console.log('==== Debug de Token ====');
-    console.log('Token:', tokenStatus);
-    console.log('isAuthenticated:', this.isAuthenticated());
-    console.log('isAdmin:', this.isAdmin());
-    console.log('userData:', authState.currentUser);
-    console.log('=======================');
-    
-    return {
-      hasToken: !!token,
-      isAuthenticated: this.isAuthenticated(),
-      isAdmin: this.isAdmin()
-    };
-  },
-
-  // Registro
   async register(userData) {
     try {
-      const res = await fetch(`${API}/users/register`, {
+      userData.deviceInfo = getDeviceInfo();
+      
+      const res = await fetchWithAuth(`${API}/users/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const error = new Error(errorData.message || 'Erro no registro');
-        error.status = res.status;
-        error.data = errorData;
-        throw error;
+        throw new Error(errorData.message || 'Erro no registro');
       }
 
-      showNotification('Cadastro realizado com sucesso! Redirecionando para login...');
+      showNotification('Cadastro realizado com sucesso!', 'success');
       setTimeout(() => window.location.href = 'login.html', 2000);
       return true;
-
     } catch (err) {
-      console.error('Erro no registro:', err);
+      console.error('[Register Error]', err);
+      showNotification(err.message || 'Erro no registro', 'error');
       throw err;
     }
   },
 
-  // Login
   async login(credentials) {
     try {
-      const response = await fetch(`${API}/users/login`, {
+      console.log('[Login] Iniciando processo de login...');
+
+      // Adicionar informações do dispositivo
+      credentials.deviceInfo = getDeviceInfo();
+
+      const response = await fetchWithAuth(`${API}/users/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-        credentials: 'include' // Importante para receber e enviar cookies
+        body: JSON.stringify(credentials)
       });
 
       if (!response.ok) {
-        await handleApiError(response, 'Credenciais inválidas');
-        throw new Error('Falha na autenticação');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Credenciais inválidas');
       }
 
       const data = await response.json();
-      const token = data.token || data.accessToken;
-
-      // Criar objeto de usuário EXCLUINDO o token
-      let user;
-      if (data.user) {
-        // Se os dados do usuário estão em um objeto separado
-        user = {...data.user};
-      } else {
-        // Se os dados do usuário estão no objeto principal
-        user = {...data};
-        // Remover campos relacionados a token
-        delete user.token;
-        delete user.accessToken;
-        delete user.refreshToken;
+      console.log('[Login] Resposta recebida:', { 
+        hasAccessToken: !!data.accessToken,
+        hasRefreshToken: !!data.refreshToken
+      });
+      
+      if (!data.accessToken || !data.refreshToken) {
+        throw new Error('Tokens não recebidos');
       }
 
-      if (!token) {
-        await handleApiError(response, 'Falha no login: token não recebido');
-        throw new Error('Token não recebido');
-      }
+      // Atualizar estado e localStorage
+      const authData = {
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        sessionId: data.sessionId,
+        deviceInfo: data.deviceInfo,
+        user: data.user ?? data
+      };
 
-      // Atualiza estado (token APENAS na memória)
-      authState.token = token;
-      authState.currentUser = user;
+      localStorage.setItem('auth', JSON.stringify(authData));
+      
+      authState.accessToken = authData.accessToken;
+      authState.refreshToken = authData.refreshToken;
+      authState.sessionId = authData.sessionId;
+      authState.deviceInfo = authData.deviceInfo;
+      authState.currentUser = authData.user;
       authState.isAuthenticated = true;
-      
-      // Armazenar apenas dados do usuário no localStorage (sem token)
-      localStorage.setItem('userData', JSON.stringify(user));
 
-      // Feedback visual
-      const displayName = user?.name || user?.email || 'usuário';
-      showNotification(`Bem-vindo, ${displayName}! Redirecionando...`);
-      
-      // Atualiza UI e dispara evento depois de confirmar o estado
-      this.updateAuthUI();
-      
-      // Disparar evento para notificar componentes sobre mudança no estado
       window.dispatchEvent(new Event('auth-state-changed'));
+      
+      const displayName = authData.user?.name || 
+                         authData.user?.email || 
+                         'usuário';
+      
+      showNotification(`Bem-vindo, ${displayName}!`, 'success');
+      this.updateAuthUI();
 
-      // Redirecionamento seguro
-      setTimeout(() => {
-        const redirectTo = localStorage.getItem('redirectTo') || 'index.html';
-        localStorage.removeItem('redirectTo');
-          
-        if (redirectTo.includes('admin.html') && !this.isAdmin()) {
-          window.location.href = 'index.html';
-          showNotification('Você não tem permissão para acessar a área de administração', 'warning');
-        } else {
-          window.location.href = redirectTo;
-        }
-      }, 2000);
+      // Redirecionar
+      const redirectTo = localStorage.getItem('redirectTo') || 'index.html';
+      localStorage.removeItem('redirectTo');
+
+      // Verificar permissão antes do redirecionamento
+      if (redirectTo.includes('admin.html') && !this.isAdmin()) {
+        window.location.href = 'index.html';
+        showNotification('Acesso restrito', 'warning');
+      } else {
+        window.location.href = redirectTo;
+      }
 
       return true;
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('[Login Error]', error);
+      showNotification(error.message || 'Erro no login', 'error');
       throw error;
     }
   },
 
-  // Renovar token - versão robusta
-  async refreshToken() {
+  async logout() {
     try {
-      console.log("Tentando renovar token...");
-      
-      // Se já está em processo de renovação, aguarde
-      if (this._refreshing) {
-        console.log("Já existe uma renovação em andamento, aguardando...");
-        await this._refreshPromise;
-        return !!authState.token;
-      }
-      
-      // Criar uma promessa para permitir outros chamarem aguardarem
-      this._refreshing = true;
-      this._refreshPromise = new Promise(async (resolve) => {
-        try {
-          const response = await fetch(`${API}/users/refresh-token`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-
-          if (!response.ok) {
-            console.error("Falha na resposta do refresh token:", response.status);
-            resolve(false);
-            return false;
+      // Tentar fazer logout no servidor
+      if (this.isAuthenticated()) {
+        await fetchWithAuth(`${API}/users/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.getAccessToken()}`,
+            'X-Refresh-Token': this.getRefreshToken(),
+            'X-Session-Id': authState.sessionId
           }
-
-          const data = await response.json();
-          console.log("Token renovado com sucesso!");
-          authState.token = data.token;
-          authState.isAuthenticated = true;
-          
-          // Atualizar userData se necessário
-          if (data.user && !authState.currentUser) {
-            authState.currentUser = data.user;
-            localStorage.setItem('userData', JSON.stringify(data.user));
-          }
-          
-          // Disparar evento
-          window.dispatchEvent(new Event('auth-state-changed'));
-          
-          resolve(true);
-          return true;
-        } catch (error) {
-          console.error('Erro ao renovar token:', error);
-          resolve(false);
-          return false;
-        } finally {
-          this._refreshing = false;
-        }
-      });
-      
-      return await this._refreshPromise;
-    } catch (error) {
-      console.error('Erro no processo de renovação de token:', error);
-      this._refreshing = false;
-      return false;
-    }
-  },
-
-  // Logout
-  logout() {
-    // Executar logout na API (opcional, se implementado)
-    fetch(`${API}/users/logout`, {
-      method: 'POST',
-      credentials: 'include'
-    }).catch(err => console.log('Aviso: Falha ao notificar servidor sobre logout', err));
-    
-    // Limpar dados locais
-    localStorage.removeItem('userData');
-    authState.isAuthenticated = false;
-    authState.currentUser = null;
-    authState.token = null;
-    
-    // Atualizar UI primeiro
-    this.updateAuthUI();
-    
-    // Depois disparar evento
-    window.dispatchEvent(new Event('auth-state-changed'));
-    
-    showNotification('Logout realizado com sucesso', 'success');
-    
-    // Se já estamos na página inicial, forçar recarga para atualizar UI completamente
-    if (window.location.pathname.includes('index.html') || window.location.pathname === '/') {
-      setTimeout(() => window.location.reload(), 1500);
-    } else {
-      setTimeout(() => window.location.href = 'index.html', 1500);
-    }
-  },
-
-  // Inicialização
-  async initialize() {
-    console.log("Inicializando autenticação...");
-    
-    // Definir explicitamente como não autenticado por padrão
-    authState.isAuthenticated = false;
-    authState.currentUser = null;
-    authState.token = null;
-    
-    // Primeira atualização para garantir que a UI comece no estado correto
-    this.updateAuthUI();
-    
-    const userData = JSON.parse(localStorage.getItem('userData'));
-
-    if (!userData) {
-      console.log("Nenhum dado de usuário encontrado no localStorage.");
-      // Disparar evento mesmo sem autenticação
-      setTimeout(() => {
-        window.dispatchEvent(new Event('auth-initialized'));
-      }, 50);
-      return;
-    }
-
-    console.log("Dados de usuário encontrados, tentando renovar o token...");
-    
-    try {
-      // Tentar renovar o token usando o refresh token
-      const success = await this.refreshToken();
-      
-      if (success) {
-        console.log("Token renovado com sucesso, autenticando usuário...");
-        // Se o refresh token funcionou, o token já foi atualizado
-        authState.currentUser = userData;
-        authState.isAuthenticated = true;
-        console.log("Usuário autenticado!");
-        
-        // Debug token após autenticação
-        this.debugToken();
-      } else {
-        console.log("Falha ao renovar token, limpando estado de autenticação...");
-        // Se falhou, limpar o estado de autenticação
-        localStorage.removeItem('userData');
-        authState.isAuthenticated = false;
-        authState.currentUser = null;
-        authState.token = null;
+        });
       }
-    } catch (err) {
-      console.error('Erro na inicialização da autenticação:', err);
-      localStorage.removeItem('userData');
-      authState.isAuthenticated = false;
+
+      // Limpar dados locais
+      localStorage.removeItem('auth');
+      authState.accessToken = null;
+      authState.refreshToken = null;
+      authState.sessionId = null;
+      authState.deviceInfo = null;
       authState.currentUser = null;
-      authState.token = null;
-    }
-
-    // Atualizar UI após determinar estado
-    this.updateAuthUI();
-    
-    // Garantir que o evento seja disparado após pequeno delay 
-    // para dar tempo ao DOM de processar as mudanças
-    setTimeout(() => {
+      authState.isAuthenticated = false;
+      
       window.dispatchEvent(new Event('auth-state-changed'));
-      window.dispatchEvent(new Event('auth-initialized'));
-    }, 50);
-    
-    return true;
+      
+      showNotification('Logout realizado com sucesso', 'success');
+      this.updateAuthUI();
+      
+      // Redirecionar para login
+      window.location.href = 'login.html';
+    } catch (error) {
+      console.error('[Logout Error]', error);
+      // Mesmo com erro, limpar dados locais
+      this.clearAuthState();
+      window.location.href = 'login.html';
+    }
   },
 
-  // Limpar estado de autenticação
+  async initialize() {
+    console.log('[Init] Inicializando sistema de autenticação...');
+    
+    try {
+      const saved = JSON.parse(localStorage.getItem('auth'));
+      console.log('[Init] Dados salvos:', { 
+        hasAccessToken: !!saved?.accessToken,
+        hasRefreshToken: !!saved?.refreshToken
+      });
+
+      if (!saved?.accessToken || !saved?.refreshToken) {
+        this.clearAuthState();
+        this.updateAuthUI();
+        window.dispatchEvent(new Event('auth-initialized'));
+        return;
+      }
+
+      console.log('[Init] Validando tokens...');
+      const response = await fetchWithAuth(`${API}/users/me`);
+
+      if (response.ok) {
+        const apiUserData = await response.json();
+        console.log('[Init] Dados do usuário recebidos');
+        
+        // Manter role se existir no localStorage
+        if (!apiUserData.role && saved.user?.role) {
+          apiUserData.role = saved.user.role;
+        }
+        
+        authState.accessToken = saved.accessToken;
+        authState.refreshToken = saved.refreshToken;
+        authState.sessionId = saved.sessionId;
+        authState.deviceInfo = saved.deviceInfo;
+        authState.currentUser = apiUserData;
+        authState.isAuthenticated = true;
+        
+        // Atualizar localStorage
+        localStorage.setItem('auth', JSON.stringify({
+          accessToken: saved.accessToken,
+          refreshToken: saved.refreshToken,
+          sessionId: saved.sessionId,
+          deviceInfo: saved.deviceInfo,
+          user: apiUserData
+        }));
+
+        console.log('[Init] Estado de autenticação atualizado');
+      } else {
+        console.warn('[Init] Tokens inválidos ou expirados');
+        this.clearAuthState();
+      }
+
+      this.updateAuthUI();
+      window.dispatchEvent(new Event('auth-initialized'));
+    } catch (error) {
+      console.error('[Init Error]', error);
+      this.clearAuthState();
+      this.updateAuthUI();
+      window.dispatchEvent(new Event('auth-initialized'));
+    }
+  },
+
   clearAuthState() {
-    localStorage.removeItem('userData');
-    authState.token = null;
+    localStorage.removeItem('auth');
+    authState.accessToken = null;
+    authState.refreshToken = null;
+    authState.sessionId = null;
+    authState.deviceInfo = null;
     authState.currentUser = null;
     authState.isAuthenticated = false;
-      
+    
     window.dispatchEvent(new Event('auth-state-changed'));
   },
 
-  // Atualização da UI
   updateAuthUI() {
-    console.log('Atualizando UI de autenticação...', 
-      authState.isAuthenticated ? 'Autenticado' : 'Não autenticado',
-      'Admin:', this.isAdmin() ? 'Sim' : 'Não');
+    const authStatus = this.isAuthenticated() ? 'Autenticado' : 'Não autenticado';
+    console.log('[UI] Atualizando interface:', authStatus);
     
-    // Debug para confirmar que conhecemos o estado
-    console.log('Estado completo:', {
-      isAuthenticated: authState.isAuthenticated,
-      userRole: authState.currentUser?.role,
-      isAdmin: this.isAdmin(),
-      hasToken: !!authState.token
-    });
-    
-    // Aplicar visibilidade com base no localStorage como fallback
-    // (para garantir consistência com `components.js`)
-    const userData = JSON.parse(localStorage.getItem('userData'));
-    const isLoggedInLS = !!userData;
-    const isAdminLS = userData && userData.role === 'ADMIN';
-    
-    // Verificar se há discrepância entre estado em memória e localStorage
-    if (isLoggedInLS !== authState.isAuthenticated) {
-      console.warn('Discrepância entre localStorage e authState:', 
-        { localStorage: isLoggedInLS, authState: authState.isAuthenticated });
-        
-      // Priorizar localStorage
-      if (isLoggedInLS && userData) {
-        authState.isAuthenticated = true;
-        authState.currentUser = userData;
-      } else {
-        authState.isAuthenticated = false;
-        authState.currentUser = null;
-        authState.token = null;
-      }
-    }
-    
-    // Seleciona todos os elementos com atributo data-auth
     document.querySelectorAll('[data-auth]').forEach(el => {
       const authType = el.dataset.auth;
-      let shouldShow = false;
+      const shouldShow = 
+        (authType === 'authenticated' && this.isAuthenticated()) || 
+        (authType === 'unauthenticated' && !this.isAuthenticated()) ||
+        (authType === 'admin' && this.isAdmin());
       
-      // Determina se o elemento deve ser mostrado
-      switch(authType) {
-        case 'all':
-          shouldShow = true;
-          break;
-        case 'authenticated':
-          shouldShow = authState.isAuthenticated;
-          break;
-        case 'unauthenticated':
-          shouldShow = !authState.isAuthenticated;
-          break;
-        case 'admin':
-          shouldShow = this.isAdmin();
-          break;
-      }
-      
-      // Mostra ou esconde o elemento
       el.style.display = shouldShow ? '' : 'none';
-      console.log(`Menu ${el.textContent.trim()} [data-auth="${authType}"]`, shouldShow ? 'mostrado' : 'escondido');
     });
 
-    // Aplica classes ao body
-    document.body.classList.toggle('authenticated', authState.isAuthenticated);
-    document.body.classList.toggle('unauthenticated', !authState.isAuthenticated);
-    document.body.classList.toggle('admin', this.isAdmin());
-    
-    // Atualiza campos com dados do usuário
     document.querySelectorAll('[data-user]').forEach(el => {
       const field = el.dataset.user;
       el.textContent = authState.currentUser?.[field] || '';
     });
+
+    document.body.classList.toggle('authenticated', this.isAuthenticated());
+    document.body.classList.toggle('unauthenticated', !this.isAuthenticated());
+    document.body.classList.toggle('admin', this.isAdmin());
+  },
+
+  // Métodos de gerenciamento de sessões
+  async getSessions() {
+    if (!this.isAuthenticated()) return [];
+    
+    try {
+      const response = await fetchWithAuth(`${API}/users/sessions`);
+      if (!response.ok) throw new Error('Falha ao buscar sessões');
+      
+      const sessions = await response.json();
+      return sessions.map(session => ({
+        ...session,
+        isCurrentSession: session.id === authState.sessionId
+      }));
+    } catch (error) {
+      console.error('[Get Sessions Error]', error);
+      return [];
+    }
+  },
+
+  async terminateSession(sessionId) {
+    if (!this.isAuthenticated()) return false;
+    
+    try {
+      const response = await fetchWithAuth(`${API}/users/sessions/${sessionId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Falha ao encerrar sessão');
+      
+      // Se a sessão encerrada for a atual, fazer logout
+      if (sessionId === authState.sessionId) {
+        await this.logout();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('[Terminate Session Error]', error);
+      return false;
+    }
+  },
+
+  async terminateAllSessions() {
+    if (!this.isAuthenticated()) return false;
+    
+    try {
+      const response = await fetchWithAuth(`${API}/users/logout-all`, {
+        method: 'POST'
+      });
+      
+      if (!response.ok) throw new Error('Falha ao encerrar todas as sessões');
+      
+      // Fazer logout local após encerrar todas as sessões
+      await this.logout();
+      return true;
+    } catch (error) {
+      console.error('[Terminate All Sessions Error]', error);
+      return false;
+    }
   }
 };
 
-
-
-// --- Inicialização automática ---
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('[Init] Inicializando auth.js...');
+  
   if (!document.getElementById('notification-container')) {
     const nc = document.createElement('div');
     nc.id = 'notification-container';
     document.body.prepend(nc);
   }
-  
-  // Inicializar auth e guardar promessa
-  const initPromise = authService.initialize();
-  
-  // Verificar se há um navbar, se não, esperar e atualizar UI novamente
-  setTimeout(() => {
-    if (document.querySelector('nav')) {
-      console.log('Navbar encontrada, atualizando a UI novamente');
-      authService.updateAuthUI();
-    }
-  }, 100);
-});
 
-// Expor método para forçar atualização da UI (apenas para debug)
-window.forceUpdateAuthUI = () => authService.updateAuthUI();
+  authService.initialize().catch(error => {
+    console.error('[Init Error]', error);
+    authService.clearAuthState();
+  });
+});

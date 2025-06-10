@@ -1,23 +1,29 @@
-export const validateUpload = (options = {}) => {
-  return (req, res, next) => {
-    if (!req.files || !req.files.image) { // Campo "image" deve existir
-      return next(new ErrorHandler("Nenhum arquivo enviado", 400));
-    }
+export const validateUpload = (fieldName = 'image') => (req, res, next) => {
+  console.log('🔍 ValidateUpload - Iniciando validação');
+  console.log('📁 Files recebidos:', Object.keys(req.files || {}));
 
-    const image = req.files.image;
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-      const maxSize = options.maxSize || 5 * 1024 * 1024; // 5MB padrão
+  if (!req.files || !req.files[fieldName]) {
+    console.log(`❌ ValidateUpload - Nenhum arquivo ${fieldName} encontrado`);
+    return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  }
+
+  const file = req.files[fieldName];
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
   
-      // Verificar tipo de arquivo
-      if (!allowedTypes.includes(image.mimetype)) {
-        return next(new ErrorHandler("Formato de imagem inválido (use JPEG, PNG ou WEBP)", 400));
-      }
-  
-      // Verificar tamanho
-      if (image.size > maxSize) {
-        return next(new ErrorHandler(`Imagem muito grande (máximo ${maxSize / 1024 / 1024}MB)`, 400));
-      }
-  
-      next();
-    };
-  };
+  if (!allowedTypes.includes(file.mimetype)) {
+    console.log('❌ ValidateUpload - Tipo de arquivo inválido:', file.mimetype);
+    return res.status(400).json({ 
+      error: 'Formato de arquivo inválido. Use JPEG, PNG ou GIF' 
+    });
+  }
+
+  if (file.size > 5 * 1024 * 1024) { // 5MB
+    console.log('❌ ValidateUpload - Arquivo muito grande:', file.size);
+    return res.status(400).json({ 
+      error: 'Arquivo muito grande. Máximo de 5MB permitido' 
+    });
+  }
+
+  console.log('✅ ValidateUpload - Arquivo válido');
+  next();
+};

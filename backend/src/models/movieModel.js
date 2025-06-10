@@ -62,7 +62,7 @@ export async function deleteMovie(id) {
 export async function getMoviesByUserId(userId) {
   return prisma.movie.findMany({
     where: {
-      userId: Number(userId)
+      addedByUserId: Number(userId)
     },
     orderBy: {
       createdAt: 'desc'

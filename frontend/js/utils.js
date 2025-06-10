@@ -10,7 +10,7 @@ export async function fetchWithAuth(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`;
   
   // Prepara as opções da requisição com o token de autenticação
-  const token = authService.getToken();
+  const token = authService.getAccessToken();
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers
@@ -43,7 +43,7 @@ export async function fetchWithAuth(endpoint, options = {}) {
       if (tokenRefreshed) {
         console.log("Token renovado com sucesso, repetindo requisição...");
         // Atualiza o token na requisição
-        const newToken = authService.getToken();
+        const newToken = authService.getAccessToken();
         headers['Authorization'] = `Bearer ${newToken}`;
         
         // Refaz a requisição com o novo token

@@ -1,12 +1,55 @@
 // js/admin.js
-
 import { authService } from './auth.js';
 import { showNotification } from './utils.js';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:3000/api';
 
 // Controle de inicialização
 let initialized = false;
+
+// Helper para requisições autenticadas
+async function fetchWithAuth(url, options = {}) {
+  const token = authService.getAccessToken();
+  const refreshToken = authService.getRefreshToken();
+  const sessionId = authService.authState.sessionId;
+
+  if (!token) {
+    throw new Error('Token de autenticação não encontrado');
+  }
+
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${token}`,
+    'X-Refresh-Token': refreshToken,
+    'X-Session-Id': sessionId,
+    'User-Agent': navigator.userAgent
+  };
+
+  if (options.body && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
+
+  if (response.status === 401 && refreshToken) {
+    try {
+      const newToken = await authService.refreshTokens();
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        return fetch(url, { ...options, headers });
+      }
+    } catch (error) {
+      console.error('Erro ao renovar token:', error);
+      await authService.logout();
+      throw new Error('Sessão expirada - faça login novamente');
+    }
+  }
+
+  return response;
+}
 
 // Função principal para inicializar a página
 function init() {
@@ -101,12 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
   
   // Aguardar inicialização da autenticação
-  if (authService.isAuthenticated()) {
+  if (window.navbarInitialized) {
     init();
   } else {
-    // Aguardar o evento de inicialização
     window.addEventListener('auth-initialized', () => {
-      setTimeout(init, 100); // Pequeno atraso para garantir que o estado esteja atualizado
+      setTimeout(init, 100);
     });
   }
   
@@ -136,134 +178,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }, 2000);
-
-  // Adicionar botão de debug na UI - remove este código em produção
-  const debugBtn = document.createElement('button');
-  debugBtn.textContent = 'Depurar Auth';
-  debugBtn.style.position = 'fixed';
-  debugBtn.style.bottom = '10px';
-  debugBtn.style.right = '10px';
-  debugBtn.style.zIndex = 9999;
-  debugBtn.style.padding = '5px 10px';
-  debugBtn.style.background = '#ff5500';
-  debugBtn.style.color = 'white';
-  debugBtn.style.border = 'none';
-  debugBtn.style.borderRadius = '4px';
-  debugBtn.style.cursor = 'pointer';
-  
-  debugBtn.addEventListener('click', function() {
-    debugAuth().then(result => {
-      console.log('Debug concluído:', result);
-    });
-  });
-  
-  document.body.appendChild(debugBtn);
 });
-
-// Função para debug de autenticação
-async function debugAuth() {
-  try {
-    // Verificar estado atual
-    const debugInfo = authService.debugToken();
-    console.table(debugInfo);
-    
-    // Tentar renovar token explicitamente
-    console.log('Forçando renovação de token...');
-    const success = await authService.refreshToken();
-    console.log('Renovação de token:', success ? 'sucesso' : 'falha');
-    
-    // Verificar estado após renovação
-    const newDebugInfo = authService.debugToken();
-    console.table(newDebugInfo);
-    
-    // Se conseguimos um token, tentar recarregar usuários
-    if (newDebugInfo.hasToken) {
-      console.log('Recarregando usuários após renovação de token...');
-      loadUsers();
-    }
-    
-    return {
-      beforeRefresh: debugInfo,
-      afterRefresh: newDebugInfo
-    };
-  } catch (error) {
-    console.error('Erro durante debug:', error);
-    return { error: error.message };
-  }
-}
-
-// Nova função para retry
-async function retryLoadUsers() {
-  console.log('Tentando carregar usuários novamente...');
-  
-  try {
-    // Forçar renovação de token antes de tentar novamente
-    const success = await authService.refreshToken();
-    console.log('Renovação de token antes de retry:', success ? 'sucesso' : 'falha');
-    
-    const token = authService.getToken();
-    console.log('Token antes de retry:', token ? 'presente' : 'ausente');
-    
-    // Pequeno delay para evitar múltiplas chamadas
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Tentar carregar usuários novamente
-    await loadUsers();
-    return true;
-  } catch (err) {
-    console.error('Erro no retry:', err);
-    return false;
-  }
-}
 
 // Funções para carregar e gerenciar dados
 async function loadUsers() {
   try {
     console.log('Carregando usuários...');
-    let token = authService.getToken();
     
-    // Se não temos um token, tentar renovar explicitamente
-    if (!token) {
-      console.log('Token não encontrado, tentando renovar...');
-      const refreshSuccess = await authService.refreshToken();
-      
-      if (refreshSuccess) {
-        console.log('Renovação de token bem-sucedida!');
-        token = authService.getToken();
-      } else {
-        console.error('Não foi possível renovar o token');
-        throw new Error('Não foi possível obter um token de autenticação válido');
-      }
-    }
-    
-    // Debug do token
-    console.log('Token para requisição:', 
-                token ? `${token.substring(0, 10)}...` : 'ausente');
-    
-    const response = await fetch(`${API_URL}/users/admin/users`, {
-      method: 'GET', // Especificar método explicitamente
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include' // Incluir cookies
-    });
+    const response = await fetchWithAuth(`${API_URL}/users/admin/users`);
     
     if (!response.ok) {
-      // Tentar renovar o token se receber 401 (Unauthorized)
-      if (response.status === 401) {
-        console.log('Token inválido ou expirado, renovando...');
-        const renewed = await authService.refreshToken();
-        
-        if (renewed) {
-          console.log('Token renovado, tentando requisição novamente');
-          // Tentar novamente com o novo token
-          return await retryLoadUsers();
-        } else {
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-      }
-      
       let errorMessage = `Erro do servidor: ${response.status} ${response.statusText}`;
       try {
         const errorData = await response.json();
@@ -352,7 +276,7 @@ async function loadUsers() {
         <h2>Gerenciamento de Usuários</h2>
         <div class="error-message">
           <p>Erro ao carregar dados: ${error.message}</p>
-          <button class="btn btn-primary" onclick="retryLoadUsers()">
+          <button class="btn btn-primary" onclick="window.location.reload()">
             Tentar novamente
           </button>
         </div>
@@ -435,30 +359,15 @@ function renderUsersTable(users) {
 async function loadReviews() {
   try {
     console.log('Carregando avaliações...');
-    const token = authService.getToken();
-    
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
+    const token = authService.getAccessToken();
     
     const response = await fetch(`${API_URL}/reviews/admin/stats`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${token}`
+      }
     });
     
     if (!response.ok) {
-      // Tentar renovar token em caso de falha de autorização
-      if (response.status === 401) {
-        const renewed = await authService.refreshToken();
-        if (renewed) {
-          // Tentar novamente com o novo token
-          return loadReviews();
-        }
-      }
-      
       throw new Error(`Erro ao carregar estatísticas: ${response.status} ${response.statusText}`);
     }
     
@@ -470,10 +379,8 @@ async function loadReviews() {
     // Carregar lista de avaliações
     const reviewsResponse = await fetch(`${API_URL}/reviews/admin/list`, {
       headers: {
-        'Authorization': `Bearer ${authService.getToken()}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${token}`
+      }
     });
     
     if (!reviewsResponse.ok) {
@@ -633,31 +540,16 @@ function renderReviewsTable(reviews) {
 async function loadMovies() {
   try {
     console.log('Carregando filmes...');
-    const token = authService.getToken();
-    
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
+    const token = authService.getAccessToken();
     
     // Carregar estatísticas
     const statsResponse = await fetch(`${API_URL}/movies/admin/stats`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${token}`
+      }
     });
     
     if (!statsResponse.ok) {
-      // Tentar renovar token em caso de falha de autorização
-      if (statsResponse.status === 401) {
-        const renewed = await authService.refreshToken();
-        if (renewed) {
-          // Tentar novamente com o novo token
-          return loadMovies();
-        }
-      }
-      
       throw new Error(`Erro ao carregar estatísticas: ${statsResponse.status}`);
     }
     
@@ -666,10 +558,8 @@ async function loadMovies() {
     // Carregar lista de filmes
     const listResponse = await fetch(`${API_URL}/movies/admin/list`, {
       headers: {
-        'Authorization': `Bearer ${authService.getToken()}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${token}`
+      }
     });
     
     if (!listResponse.ok) {
@@ -773,7 +663,7 @@ function editMovie(id) {
 
 async function deleteMovie(id) {
   try {
-    const token = authService.getToken();
+    const token = authService.getAccessToken();
     if (!token) {
       throw new Error('Token de autenticação não encontrado');
     }
@@ -781,10 +671,8 @@ async function deleteMovie(id) {
     // Obter informações do filme
     const movieResponse = await fetch(`${API_URL}/movies/${id}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${token}`
+      }
     });
     
     if (!movieResponse.ok) {
@@ -798,10 +686,8 @@ async function deleteMovie(id) {
       const response = await fetch(`${API_URL}/movies/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       if (!response.ok) {
@@ -847,18 +733,11 @@ function confirmDeleteReview(reviewId, movieTitle) {
 
 async function deleteReview(reviewId) {
   try {
-    const token = authService.getToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-    
     const response = await fetch(`${API_URL}/reviews/admin/${reviewId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${authService.getAccessToken()}`
+      }
     });
     
     if (!response.ok) {
@@ -879,18 +758,11 @@ async function deleteReview(reviewId) {
 async function promoteUser(userId, userName) {
   if (confirm(`Tem certeza que deseja promover ${userName} para ADMINISTRADOR?`)) {
     try {
-      const token = authService.getToken();
-      if (!token) {
-        throw new Error('Token de autenticação não encontrado');
-      }
-      
       const response = await fetch(`${API_URL}/users/admin/users/${userId}/promote`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
+          'Authorization': `Bearer ${authService.getAccessToken()}`
+        }
       });
       
       if (!response.ok) {
@@ -918,18 +790,11 @@ async function promoteUser(userId, userName) {
 async function demoteUser(userId, userName) {
   if (confirm(`Tem certeza que deseja rebaixar ${userName} para usuário comum?`)) {
     try {
-      const token = authService.getToken();
-      if (!token) {
-        throw new Error('Token de autenticação não encontrado');
-      }
-      
       const response = await fetch(`${API_URL}/users/admin/users/${userId}/demote`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
+          'Authorization': `Bearer ${authService.getAccessToken()}`
+        }
       });
       
       if (!response.ok) {
@@ -962,18 +827,11 @@ function confirmDeleteUser(userId, userName) {
 
 async function deleteUser(userId, userName) {
   try {
-    const token = authService.getToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-    
     const response = await fetch(`${API_URL}/users/admin/users/${userId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Authorization': `Bearer ${authService.getAccessToken()}`
+      }
     });
     
     if (!response.ok) {
@@ -1007,5 +865,20 @@ window.promoteUser = promoteUser;
 window.demoteUser = demoteUser;
 window.confirmDeleteUser = confirmDeleteUser;
 window.deleteUser = deleteUser;
-window.retryLoadUsers = retryLoadUsers;
-window.debugAuth = debugAuth;
+
+// Exportar funções necessárias
+export {
+  init,
+  loadUsers,
+  loadReviews,
+  loadMovies,
+  editMovie,
+  deleteMovie,
+  viewReview,
+  confirmDeleteReview,
+  deleteReview,
+  promoteUser,
+  demoteUser,
+  confirmDeleteUser,
+  deleteUser
+};

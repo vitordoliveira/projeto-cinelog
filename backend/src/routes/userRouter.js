@@ -10,7 +10,9 @@ import getUserReviewsController from '../controllers/user/getUserReviewsControll
 import getUserMoviesController from '../controllers/user/getUserMoviesController.js';
 import generateAvatarController from '../controllers/user/generateAvatarController.js';
 import uploadAvatarController from '../controllers/user/uploadAvatarController.js';
-import refreshTokenController from '../controllers/user/refreshTokenController.js';
+import getSessionsController from '../controllers/user/getSessionsController.js';
+import terminateSessionController from '../controllers/user/terminateSessionController.js';
+import logoutAllSessionsController from '../controllers/user/logoutAllSessionsController.js';
 import { 
   listAllUsers, 
   promoteUser, 
@@ -23,9 +25,11 @@ import { auth } from '../middlewares/authMiddleware.js';
 import { isAdmin } from '../middlewares/adminMiddleware.js';
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import { registerSchema, loginSchema, updateUserSchema } from '../schemas/userSchemas.js';
+import { validateUpload } from '../middlewares/validateUpload.js';
 
 const router = Router();
 
+// Rotas de autenticação (públicas)
 router.post(
   '/register',
   validate(registerSchema),
@@ -38,6 +42,26 @@ router.post(
   asyncHandler(loginUserController)
 );
 
+// Rotas de sessão
+router.get(
+  '/sessions',
+  auth,
+  asyncHandler(getSessionsController)
+);
+
+router.delete(
+  '/sessions/:sessionId',
+  auth,
+  asyncHandler(terminateSessionController)
+);
+
+router.post(
+  '/logout-all',
+  auth,
+  asyncHandler(logoutAllSessionsController)
+);
+
+// Rotas protegidas (requerem autenticação)
 router.get(
   '/',
   auth,
@@ -75,10 +99,10 @@ router.put(
   asyncHandler(updateUserController)
 );
 
-// Rota para gerar/atualizar avatar
 router.post(
   '/:id/avatar',
   auth,
+  validateUpload('avatar'),
   asyncHandler(uploadAvatarController)
 );
 
@@ -94,9 +118,7 @@ router.post(
   asyncHandler(generateAvatarController)
 );
 
-// --- Novas rotas de administração ---
-
-// Listar todos os usuários com detalhes (apenas admin)
+// Rotas de administração
 router.get(
   '/admin/users',
   auth,
@@ -104,7 +126,6 @@ router.get(
   asyncHandler(listAllUsers)
 );
 
-// Promover usuário para admin
 router.put(
   '/admin/users/:userId/promote',
   auth,
@@ -112,7 +133,6 @@ router.put(
   asyncHandler(promoteUser)
 );
 
-// Rebaixar usuário de admin para usuário comum
 router.put(
   '/admin/users/:userId/demote',
   auth,
@@ -120,7 +140,6 @@ router.put(
   asyncHandler(demoteUser)
 );
 
-// Exclusão de usuário por administrador
 router.delete(
   '/admin/users/:userId',
   auth,
@@ -128,18 +147,11 @@ router.delete(
   asyncHandler(adminDeleteUser)
 );
 
-// NOVA ROTA: Exclusão de avaliação por administrador
 router.delete(
   '/admin/reviews/:id',
   auth,
   isAdmin,
   asyncHandler(deleteReviewAdmin)
-);
-
-// Adicionar na userRouter.js
-router.post(
-  '/refresh-token',
-  asyncHandler(refreshTokenController)
 );
 
 export default router;

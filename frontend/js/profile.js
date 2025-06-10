@@ -2,15 +2,16 @@
 import { authService } from './auth.js';
 import { showNotification, handleApiError, formatDate, starRating } from './utils.js';
 import { initializeNavbar } from './components.js';
+import { sessionService } from './main.js';
 
-const API = 'http://localhost:3000';
+const API = 'http://localhost:3000/api';
 
 // Inicializa o serviço de perfil
 const profileService = {
     // Busca dados do usuário atual
     async fetchUserData() {
         try {
-            const token = authService.getToken();
+            const token = authService.getAccessToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return null;
@@ -18,14 +19,16 @@ const profileService = {
 
             const response = await fetch(`${API}/users/me`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 }
             });
 
             if (!response.ok) {
                 console.error('Erro ao buscar dados de usuário:', response.status);
                 if (response.status === 401) {
-                    // Forçar logout apenas se for erro de autenticação
                     authService.clearAuthState();
                     window.location.href = 'login.html';
                     return null;
@@ -48,13 +51,12 @@ const profileService = {
     // Atualiza perfil do usuário
     async updateProfile(userData) {
         try {
-            const token = authService.getToken();
+            const token = authService.getAccessToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return null;
             }
 
-            // Obtenha o ID do usuário atual
             const currentUser = authService.authState.currentUser;
             if (!currentUser || !currentUser.id) {
                 showNotification('Dados de usuário não disponíveis', 'error');
@@ -65,14 +67,16 @@ const profileService = {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 },
                 body: JSON.stringify(userData)
             });
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Forçar logout apenas se for erro de autenticação
                     authService.clearAuthState();
                     window.location.href = 'login.html';
                     return null;
@@ -95,21 +99,20 @@ const profileService = {
     // Busca as avaliações feitas pelo usuário
     async fetchUserReviews() {
         try {
-            const token = authService.getToken();
-            if (!token) {
-                return []; // Não redirecionar, apenas retornar vazio
-            }
+            const token = authService.getAccessToken();
+            if (!token) return [];
 
             const response = await fetch(`${API}/users/me/reviews`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 }
             });
 
             if (!response.ok) {
                 console.warn('Erro ao buscar avaliações:', response.status);
-                // Se o endpoint existir mas retornar erro, apenas logamos
-                // Não redirecionamos por causa de falha na busca de avaliações
                 return [];
             }
 
@@ -118,30 +121,29 @@ const profileService = {
             return reviews;
         } catch (error) {
             console.error('Erro ao buscar avaliações do usuário:', error);
-            return []; // Em caso de erro, retorna array vazio
+            return [];
         }
     },
     
     // Busca os filmes adicionados pelo usuário
     async fetchUserMovies() {
         try {
-            const token = authService.getToken();
-            if (!token) {
-                return []; // Não redirecionar, apenas retornar vazio
-            }
+            const token = authService.getAccessToken();
+            if (!token) return [];
 
             const response = await fetch(`${API}/users/me/movies`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 }
             });
 
             if (!response.ok) {
                 console.warn('Erro ao buscar filmes do usuário:', response.status);
-                
-                // Se endpoint não existe ainda, usamos dados mockados temporariamente
                 if (response.status === 404) {
-                    return mockUserMovies(); 
+                    return mockUserMovies();
                 }
                 return [];
             }
@@ -151,56 +153,55 @@ const profileService = {
             return movies;
         } catch (error) {
             console.error('Erro ao buscar filmes do usuário:', error);
-            return []; // Em caso de erro, retorna array vazio
+            return [];
         }
     },
     
     // Upload de avatar
     async uploadAvatar(formData) {
         try {
-            const token = authService.getToken();
+            const token = authService.getAccessToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return null;
             }
 
-            // Obtenha o ID do usuário atual
             const currentUser = authService.authState.currentUser;
             if (!currentUser || !currentUser.id) {
                 showNotification('Dados de usuário não disponíveis', 'error');
                 return null;
             }
 
-            // Tenta o método 1: Upload direto de arquivo
             let response = await fetch(`${API}/users/${currentUser.id}/avatar`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 },
                 body: formData
             });
 
-            // Se endpoint retornar erro 404, tenta o método 2: Gerar avatar baseado no nome
             if (response.status === 404) {
                 console.log('Endpoint de upload não disponível, tentando gerar avatar por nome...');
                 
-                // Tenta método alternativo - chamar endpoint sem arquivo
                 response = await fetch(`${API}/users/${currentUser.id}/avatar/generate`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
+                        'X-Refresh-Token': authService.getRefreshToken(),
+                        'X-Session-Id': authService.authState.sessionId,
+                        'User-Agent': navigator.userAgent,
                         'Content-Type': 'application/json'
                     }
                 });
                 
-                // Se o segundo método também falhar
                 if (!response.ok) {
-                    // Último recurso: simular uma resposta
                     showNotification('Gerando avatar localmente...', 'info');
                     console.log('Gerando avatar localmente (backend não implementado)');
                     
-                    // Gerar avatar usando serviço externo
-                    const user = authService.getCurrentUser();
+                    const user = authService.authState.currentUser;
                     const mockAvatarUrl = 'https://ui-avatars.com/api/?name=' + 
                         encodeURIComponent(user.name) + '&background=2c3440&color=fff&size=200';
                     
@@ -213,13 +214,11 @@ const profileService = {
                 }
             }
             
-            // Se algum dos métodos acima funcionou e retornou uma resposta ok
             if (response.ok) {
                 showNotification('Foto de perfil atualizada com sucesso!', 'success');
                 return await response.json();
             }
             
-            // Se nenhum método funcionou
             console.warn('Erro ao fazer upload de avatar:', response.status);
             showNotification('Não foi possível atualizar sua foto de perfil', 'error');
             return null;
@@ -233,13 +232,12 @@ const profileService = {
     // Método alternativo - gerar avatar baseado no nome
     async generateAvatar() {
         try {
-            const token = authService.getToken();
+            const token = authService.getAccessToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return null;
             }
 
-            // Obtenha o ID do usuário atual
             const currentUser = authService.authState.currentUser;
             if (!currentUser || !currentUser.id) {
                 showNotification('Dados de usuário não disponíveis', 'error');
@@ -250,18 +248,19 @@ const profileService = {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent,
                     'Content-Type': 'application/json'
                 }
             });
 
             if (!response.ok) {
-                // Fallback para simulação local
                 if (response.status === 404) {
                     showNotification('Gerando avatar localmente...', 'info');
                     console.log('Gerando avatar localmente (backend não implementado)');
                     
-                    // Gerar avatar usando serviço externo
-                    const user = authService.getCurrentUser();
+                    const user = authService.authState.currentUser;
                     const mockAvatarUrl = 'https://ui-avatars.com/api/?name=' + 
                         encodeURIComponent(user.name) + '&background=2c3440&color=fff&size=200';
                     
@@ -285,6 +284,34 @@ const profileService = {
             showNotification('Falha ao gerar avatar', 'error');
             return null;
         }
+    },
+
+    // Funções de sessão
+    async fetchUserSessions() {
+        try {
+            return await sessionService.getSessions();
+        } catch (error) {
+            console.error('Erro ao buscar sessões:', error);
+            return [];
+        }
+    },
+
+    async terminateSession(sessionId) {
+        try {
+            return await sessionService.terminateSession(sessionId);
+        } catch (error) {
+            console.error('Erro ao encerrar sessão:', error);
+            return false;
+        }
+    },
+
+    async terminateAllSessions() {
+        try {
+            return await sessionService.terminateAllSessions();
+        } catch (error) {
+            console.error('Erro ao encerrar todas as sessões:', error);
+            return false;
+        }
     }
 };
 
@@ -292,56 +319,45 @@ const profileService = {
 function getInitials(name) {
     if (!name) return '?';
     
-    // Dividir o nome em palavras e pegar a primeira letra de cada
     const words = name.split(' ').filter(word => word.length > 0);
     
     if (words.length === 1) {
-        // Se só tem uma palavra, usar as duas primeiras letras
         return words[0].substring(0, 2).toUpperCase();
     } else {
-        // Senão, pegar a primeira letra da primeira e da última palavra
         return (words[0][0] + words[words.length - 1][0]).toUpperCase();
     }
 }
 
 // Função para preencher informações do usuário
-// js/profile.js - Apenas a parte da função populateProfileInfo
 function populateProfileInfo(userData) {
-    if (!userData) return; // Proteção contra undefined
+    if (!userData) return;
     
     console.log("Populando informações do usuário:", userData);
     
-    // Atualizar nome do usuário
     const userNameElement = document.getElementById('user-name');
     if (userNameElement) {
         userNameElement.textContent = userData.name || 'Usuário';
     }
     
-    // Atualizar email
     const userEmailElement = document.getElementById('user-email');
     if (userEmailElement) {
         userEmailElement.textContent = userData.email || '';
     }
     
-    // Atualizar data de criação
     const userSinceElement = document.getElementById('user-since');
     if (userSinceElement && userData.createdAt) {
         console.log("Data de criação original:", userData.createdAt);
         
-        // Criar um objeto Date diretamente
         const formattedDate = formatDate(userData.createdAt);
         console.log("Data formatada:", formattedDate);
         
         userSinceElement.textContent = formattedDate;
     } else if (userSinceElement) {
-        // Fallback se não tiver data de criação
         userSinceElement.textContent = 'Data indisponível';
     }
     
-    // Preencher avatar com foto ou iniciais
     updateUserAvatar(userData);
     
-    // Preencher formulário caso seja mostrado posteriormente
     document.getElementById('name').value = userData.name || '';
     document.getElementById('email').value = userData.email || '';
 }
@@ -351,28 +367,22 @@ function updateUserAvatar(userData) {
     const avatarElement = document.getElementById('user-avatar');
     if (!avatarElement) return;
     
-    // Limpar conteúdo atual
     avatarElement.innerHTML = '';
     
     if (userData.avatarUrl) {
-        // Se tiver URL de avatar, mostrar a imagem
         const img = document.createElement('img');
         
-        // IMPORTANTE: Verificar se a URL já é completa ou precisa adicionar o prefixo da API
         if (userData.avatarUrl.startsWith('http')) {
             img.src = userData.avatarUrl;
         } else {
-            // Adicionar prefixo da API para caminhos relativos
             img.src = API + userData.avatarUrl;
         }
         
         console.log('Carregando avatar de:', img.src);
         
-        // Adicionar manipuladores de eventos para debugging
         img.onload = () => console.log('Avatar carregado com sucesso!');
         img.onerror = (e) => {
             console.error('Erro ao carregar avatar:', e);
-            // Fallback para iniciais se a imagem falhar
             avatarElement.textContent = getInitials(userData.name);
         };
         
@@ -380,7 +390,6 @@ function updateUserAvatar(userData) {
         img.className = 'avatar-image';
         avatarElement.appendChild(img);
     } else {
-        // Senão, mostrar iniciais
         avatarElement.textContent = getInitials(userData.name);
     }
 }
@@ -390,7 +399,7 @@ function renderUserReviews(reviews) {
     const container = document.getElementById('user-reviews');
     const emptyState = document.getElementById('empty-reviews');
     
-    if (!container || !emptyState) return; // Proteção contra elementos não encontrados
+    if (!container || !emptyState) return;
     
     if (!reviews || reviews.length === 0) {
         container.innerHTML = '';
@@ -398,20 +407,15 @@ function renderUserReviews(reviews) {
         return;
     }
 
-    // Ocultar o estado vazio
     emptyState.style.display = 'none';
     
-    // Debug: mostrar datas originais para verificar
     reviews.forEach(review => {
         console.log(`Review para "${review.movie?.title}": Data criação original = ${review.createdAt}`);
     });
     
-    // Ordenar avaliações da mais recente para a mais antiga
     reviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
-    // Construir HTML para cada avaliação
     container.innerHTML = reviews.map(review => {
-        // Verificação para garantir que temos o objeto movie
         const movie = review.movie || { id: 0, title: 'Filme indisponível', imageUrl: '' };
         
         return `
@@ -439,12 +443,12 @@ function renderUserReviews(reviews) {
     }).join('');
 }
 
-// Função para renderizar os filmes do usuário - APENAS POSTERS
+// Função para renderizar os filmes do usuário
 function renderUserMovies(movies) {
     const container = document.getElementById('user-movies');
     const emptyState = document.getElementById('empty-movies');
     
-    if (!container || !emptyState) return; // Proteção contra elementos não encontrados
+    if (!container || !emptyState) return;
     
     if (!movies || movies.length === 0) {
         container.innerHTML = '';
@@ -452,13 +456,10 @@ function renderUserMovies(movies) {
         return;
     }
 
-    // Ocultar o estado vazio
     emptyState.style.display = 'none';
     
-    // Ordenar filmes pelo ID (mais alto = mais recente)
     movies.sort((a, b) => b.id - a.id);
     
-    // Construir HTML - Apenas posters dos filmes
     container.innerHTML = movies.map(movie => {
         return `
             <div class="movie-card">
@@ -471,7 +472,6 @@ function renderUserMovies(movies) {
         `;
     }).join('');
     
-    // Adicionar estilo para melhorar a grade de posters
     const styleTag = document.createElement('style');
     styleTag.textContent = `
         #user-movies {
@@ -519,7 +519,6 @@ function renderUserMovies(movies) {
     `;
     document.head.appendChild(styleTag);
     
-    // Adicionar links aos cards de filme
     document.querySelectorAll('.movie-card').forEach(card => {
         card.addEventListener('click', function() {
             const link = this.querySelector('.movie-link');
@@ -528,23 +527,98 @@ function renderUserMovies(movies) {
     });
 }
 
+// Função para renderizar as sessões do usuário
+function renderUserSessions(sessions) {
+    const container = document.getElementById('sessions-list');
+    if (!container) return;
+    
+    if (!sessions || sessions.length === 0) {
+        container.innerHTML = `
+            <div class="no-sessions">
+                <i class="fas fa-laptop"></i>
+                <p>Nenhuma sessão ativa encontrada.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const currentSessionId = authService.authState.sessionId;
+    
+    container.innerHTML = sessions
+        .sort((a, b) => {
+            if (a.id === currentSessionId) return -1;
+            if (b.id === currentSessionId) return 1;
+            return new Date(b.lastActivity) - new Date(a.lastActivity);
+        })
+        .map(session => {
+            const isCurrentSession = session.id === currentSessionId;
+            const lastActivity = new Date(session.lastActivity).toLocaleString();
+            const createdAt = new Date(session.createdAt).toLocaleString();
+            const deviceIcon = getDeviceIcon(session.deviceInfo);
+
+            return `
+                <div class="session-card ${isCurrentSession ? 'current-session' : ''}">
+                    <div class="session-info">
+                        <div class="session-device">
+                            <i class="${deviceIcon}"></i>
+                            ${session.deviceInfo}
+                            ${isCurrentSession ? ' (Sessão Atual)' : ''}
+                        </div>
+                        <div class="session-details">
+                            <div><i class="fas fa-network-wired"></i> IP: ${session.ipAddress || 'Não disponível'}</div>
+                            <div><i class="fas fa-clock"></i> Última atividade: ${lastActivity}</div>
+                            <div><i class="fas fa-calendar-alt"></i> Iniciada em: ${createdAt}</div>
+                        </div>
+                    </div>
+                    ${!isCurrentSession ? `
+                        <div class="session-actions">
+                            <button class="terminate-btn" onclick="terminateSession('${session.id}')">
+                                <i class="fas fa-times"></i> Encerrar
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+    // Adicionar o manipulador de eventos globalmente
+    window.terminateSession = async (sessionId) => {
+        if (confirm('Tem certeza que deseja encerrar esta sessão?')) {
+            const success = await sessionService.terminateSession(sessionId);
+            if (success) {
+                const sessions = await sessionService.getSessions();
+                renderUserSessions(sessions);
+            }
+        }
+    };
+}
+
+// Função auxiliar para determinar o ícone do dispositivo
+function getDeviceIcon(deviceInfo) {
+    const deviceInfo_lower = deviceInfo.toLowerCase();
+    if (deviceInfo_lower.includes('android')) return 'fas fa-mobile-alt';
+    if (deviceInfo_lower.includes('iphone') || deviceInfo_lower.includes('ios')) return 'fas fa-mobile-alt';
+    if (deviceInfo_lower.includes('ipad')) return 'fas fa-tablet-alt';
+    if (deviceInfo_lower.includes('windows')) return 'fab fa-windows';
+    if (deviceInfo_lower.includes('mac')) return 'fab fa-apple';
+    if (deviceInfo_lower.includes('linux')) return 'fab fa-linux';
+    return 'fas fa-laptop';
+}
+
 // Função para calcular estatísticas do usuário
 function updateUserStats(reviews, movies) {
     const totalReviewsElement = document.getElementById('total-reviews');
     const totalMoviesElement = document.getElementById('total-movies');
     const averageRatingElement = document.getElementById('average-rating');
     
-    // Atualizar contagem de avaliações
     if (totalReviewsElement) {
         totalReviewsElement.textContent = reviews?.length || '0';
     }
     
-    // Atualizar contagem de filmes
     if (totalMoviesElement) {
         totalMoviesElement.textContent = movies?.length || '0';
     }
     
-    // Calcular e atualizar média de avaliações
     if (averageRatingElement) {
         if (!reviews || reviews.length === 0) {
             averageRatingElement.textContent = '0.0';
@@ -563,14 +637,11 @@ function setupTabs() {
     
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Remover classe ativa de todas as abas
             tabs.forEach(t => t.classList.remove('active'));
             contents.forEach(c => c.classList.remove('active'));
             
-            // Adicionar classe ativa à aba clicada
             tab.classList.add('active');
             
-            // Mostrar o conteúdo correspondente
             const tabName = tab.getAttribute('data-tab');
             document.getElementById(`${tabName}-content`).classList.add('active');
         });
@@ -584,60 +655,47 @@ function setupProfileButtons() {
     const editProfileSection = document.getElementById('edit-profile-section');
     
     if (editProfileBtn && saveProfileBtn && editProfileSection) {
-        // Botão de editar perfil
         editProfileBtn.addEventListener('click', () => {
             editProfileSection.style.display = 'block';
             editProfileBtn.style.display = 'none';
             saveProfileBtn.style.display = 'inline-block';
         });
         
-        // Botão de salvar alterações
         saveProfileBtn.addEventListener('click', async () => {
             const name = document.getElementById('name').value.trim();
             const password = document.getElementById('password').value.trim();
             const confirmPassword = document.getElementById('confirmPassword').value.trim();
             
-            // Validação básica
             if (!name) {
                 showNotification('O nome não pode estar vazio', 'error');
                 return;
             }
             
-            // Verificar se as senhas coincidem, se fornecidas
             if (password && password !== confirmPassword) {
                 showNotification('As senhas não coincidem', 'error');
                 return;
             }
             
-            // Preparar dados para atualização
             const updateData = { name };
-            
-            // Adicionar senha apenas se fornecida
             if (password) {
                 updateData.password = password;
             }
             
-            // Mostrar notificação de processamento
             showNotification('Atualizando seu perfil...', 'info', 2000);
             
-            // Enviar atualização
             try {
                 const result = await profileService.updateProfile(updateData);
                 
                 if (result) {
-                    // Esconder formulário e mostrar botão de editar
                     editProfileSection.style.display = 'none';
                     saveProfileBtn.style.display = 'none';
                     editProfileBtn.style.display = 'inline-block';
                     
-                    // Limpar campos de senha
                     document.getElementById('password').value = '';
                     document.getElementById('confirmPassword').value = '';
                     
-                    // Atualizar informações de autenticação local
-                    await authService.initialize(); // Recarrega dados do usuário
+                    await authService.initialize();
                     
-                    // Atualizar informações de perfil exibidas
                     populateProfileInfo(result.user || authService.getCurrentUser());
                 }
             } catch (error) {
@@ -654,32 +712,23 @@ function setupAvatarUpload() {
     const avatarUploadInput = document.getElementById('avatar-upload');
     const generateAvatarBtn = document.getElementById('generate-avatar-btn');
     
-    // Configurar botão para upload de imagem personalizada
     if (changeAvatarBtn && avatarUploadInput) {
-        // Configurar botão para abrir seletor de arquivos
         changeAvatarBtn.addEventListener('click', () => {
             avatarUploadInput.click();
         });
         
-        // Configurar handler para quando um arquivo for selecionado
         avatarUploadInput.addEventListener('change', async (event) => {
             if (event.target.files && event.target.files[0]) {
-                // Mostrar notificação
                 showNotification('Enviando imagem...', 'info', 3000);
                 
-                // Criar FormData com o arquivo
                 const formData = new FormData();
                 formData.append('avatar', event.target.files[0]);
                 
-                // Enviar para o servidor
                 try {
                     const result = await profileService.uploadAvatar(formData);
                     
                     if (result) {
-                        // Atualizar avatar
                         updateUserAvatar(result.user);
-                        
-                        // Limpar input após upload
                         avatarUploadInput.value = '';
                     }
                 } catch (error) {
@@ -690,17 +739,14 @@ function setupAvatarUpload() {
         });
     }
     
-    // Configurar botão para geração de avatar automático (alternativa)
     if (generateAvatarBtn) {
         generateAvatarBtn.addEventListener('click', async () => {
-            // Mostrar notificação
             showNotification('Gerando avatar...', 'info', 3000);
             
             try {
                 const result = await profileService.generateAvatar();
                 
                 if (result) {
-                    // Atualizar avatar
                     updateUserAvatar(result.user);
                 }
             } catch (error) {
@@ -722,48 +768,60 @@ function setupAddMovieButton() {
     }
 }
 
+// Configurar gerenciamento de sessões
+function setupSessionManagement() {
+    const terminateAllBtn = document.getElementById('terminate-all');
+    if (terminateAllBtn) {
+        terminateAllBtn.addEventListener('click', async () => {
+            if (confirm('Tem certeza que deseja encerrar todas as sessões? Você precisará fazer login novamente.')) {
+                terminateAllBtn.disabled = true;
+                terminateAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Encerrando...';
+                
+                try {
+                    const success = await sessionService.terminateAllSessions();
+                    if (success) {
+                        showNotification('Encerrando todas as sessões...', 'info');
+                    }
+                } catch (error) {
+                    console.error('Erro ao encerrar sessões:', error);
+                } finally {
+                    terminateAllBtn.disabled = false;
+                    terminateAllBtn.innerHTML = '<i class="fas fa-power-off"></i> Encerrar Todas as Sessões';
+                }
+            }
+        });
+    }
+}
+
 // Função para inicializar a página de perfil
 async function initProfilePage() {
     console.log("Inicializando página de perfil...");
     
-    // Limpar TODAS as notificações ao iniciar a página
     clearAllNotifications();
     
     try {
-        // Verificar autenticação sem redirecionar
         if (!authService.isAuthenticated()) {
             console.log("Usuário não autenticado, redirecionando...");
             showNotification('Faça login para acessar seu perfil', 'error');
-            // Atrasar redirecionamento para dar tempo da notificação aparecer
             setTimeout(() => {
                 window.location.href = 'login.html';
             }, 2000);
             return;
         }
         
-        // Configurar navegação por abas
         setupTabs();
-        
-        // Configurar botões de perfil
         setupProfileButtons();
-        
-        // Configurar upload de avatar
         setupAvatarUpload();
-        
-        // Configurar botão de adicionar filme
         setupAddMovieButton();
+        setupSessionManagement();
         
-        // Mostrar uma mensagem de carregamento com ID para poder remover depois
         const loadingId = showNotification('Carregando seu perfil...', 'info', 5000);
         
-        // Carregar dados do usuário
         console.log("Buscando dados do usuário...");
         const userData = await profileService.fetchUserData();
         
-        // Remover notificação de carregamento ASSIM QUE dados chegarem
         removeNotification(loadingId);
         
-        // Se não conseguiu buscar dados do usuário, não prosseguir
         if (!userData) {
             console.error("Falha ao buscar dados do usuário");
             return;
@@ -772,20 +830,20 @@ async function initProfilePage() {
         console.log("Dados do usuário recebidos:", userData);
         populateProfileInfo(userData);
         
-        // Carregar dados em paralelo para melhor performance
-        const [userReviews, userMovies] = await Promise.all([
+        const [userReviews, userMovies, userSessions] = await Promise.all([
             profileService.fetchUserReviews(),
-            profileService.fetchUserMovies()
+            profileService.fetchUserMovies(),
+            profileService.fetchUserSessions()
         ]);
         
         console.log("Avaliações recebidas:", userReviews?.length || 0);
         console.log("Filmes recebidos:", userMovies?.length || 0);
+        console.log("Sessões recebidas:", userSessions?.length || 0);
         
-        // Renderizar dados
         renderUserReviews(userReviews);
         renderUserMovies(userMovies);
+        renderUserSessions(userSessions);
         
-        // Atualizar estatísticas
         updateUserStats(userReviews, userMovies);
         
     } catch (error) {
@@ -814,6 +872,7 @@ function clearAllNotifications() {
 
 // Função para dados mockados (enquanto o backend não está pronto)
 function mockUserMovies() {
+// ... continuação da função mockUserMovies
     return [
         {
             id: 1,
@@ -852,10 +911,8 @@ function mockUserMovies() {
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM carregado, iniciando componentes...");
     
-    // Inicializar navbar
     initializeNavbar();
     
-    // Inicializar página de perfil (com pequeno atraso)
     setTimeout(() => {
         initProfilePage();
     }, 100);

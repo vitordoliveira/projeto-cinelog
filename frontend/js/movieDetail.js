@@ -6,7 +6,7 @@ import { movieService } from './main.js';
 
 const movieId = new URLSearchParams(window.location.search).get('id');
 const config = {
-    baseUrl: 'http://localhost:3000',
+    baseUrl: 'http://localhost:3000/api',
     endpoints: {
         movie: '/movies',
         reviews: '/reviews',
@@ -507,11 +507,11 @@ function loadAvatars() {
             return;
         }
         
-        // CORRIGIDO: Usar o caminho correto para a pasta de avatares no Cloudinary
+        // Criar nova imagem
         const img = new Image();
         
-        // A pasta correta é "cinelog/avatars" de acordo com seu controller
-        img.src = `https://res.cloudinary.com/dz4v2tibm/image/upload/cinelog/avatars/${filename}`;
+        // CORRIGIDO: Remover 'cinelog/' do caminho
+        img.src = `https://res.cloudinary.com/dz4v2tibm/image/upload/v1749571232/avatars/${filename}`;
         
         img.alt = "Avatar do usuário";
         img.className = "avatar-image";
@@ -727,7 +727,7 @@ const handleReviewSubmit = async (event) => {
     }
     
     try {
-        const token = authService.getToken();
+        const token = authService.getAccessToken();
         
         // Constrói o payload de forma diferente
         const payload = { 
@@ -775,7 +775,7 @@ const handleReviewSubmit = async (event) => {
 // Exclui uma avaliação (como usuário normal)
 const deleteReview = async (reviewId) => {
     try {
-        const token = authService.getToken();
+        const token = authService.getAccessToken();
         if (!token) {
             showNotification('Você precisa estar logado para excluir avaliações.', 'error');
             return false;
@@ -823,7 +823,7 @@ const deleteReview = async (reviewId) => {
 // Versão alternativa da função caso a primeira não funcione
 const deleteReviewAsAdmin = async (reviewId) => {
     try {
-        const token = authService.getToken();
+        const token = authService.getAccessToken();
         if (!token) {
             showNotification('Você precisa estar logado para excluir avaliações.', 'error');
             return false;

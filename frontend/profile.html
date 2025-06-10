@@ -86,6 +86,9 @@
       <button class="profile-tab" data-tab="movies">
         <i class="fas fa-film"></i> Meus Filmes
       </button>
+      <button class="profile-tab" data-tab="sessions">
+        <i class="fas fa-laptop"></i> Sessões Ativas
+      </button>
     </div>
     
     <!-- Seção de avaliações -->
@@ -122,6 +125,25 @@
           <i class="fas fa-film"></i>
           <p>Você ainda não adicionou nenhum filme.</p>
           <button class="add-movie-btn">Adicionar meu primeiro filme</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nova seção de sessões ativas -->
+    <div class="tab-content" id="sessions-content">
+      <div class="profile-section">
+        <h3><i class="fas fa-laptop"></i> Sessões Ativas</h3>
+        
+        <div class="sessions-header">
+          <p>Aqui você pode gerenciar todas as suas sessões ativas em diferentes dispositivos.</p>
+          <button id="terminate-all" class="btn-danger">
+            <i class="fas fa-power-off"></i> Encerrar Todas as Sessões
+          </button>
+        </div>
+
+        <div id="sessions-list" class="sessions-list">
+          <!-- O conteúdo será carregado via JavaScript -->
+          <div class="loading-state">Carregando suas sessões ativas...</div>
         </div>
       </div>
     </div>

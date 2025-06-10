@@ -52,7 +52,7 @@ export function initializeNavbar() {
   else if (path.includes('add.html')) currentPage = 'add';
   else if (path.includes('edit.html')) currentPage = 'edit';
   else if (path.includes('profile.html')) currentPage = 'profile';
-  else if (path.includes('admin.html')) currentPage = 'admin'; // Nova página admin
+  else if (path.includes('admin.html')) currentPage = 'admin';
   else if (path.includes('login.html')) {
     currentPage = 'login';
     document.body.classList.add('login-page');

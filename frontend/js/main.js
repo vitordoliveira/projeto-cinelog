@@ -1,3 +1,5 @@
+// main.js
+
 // Importar helpers e serviços necessários
 import { authService } from './auth.js';
 import { showNotification, handleApiError, formatDate, starRating } from './utils.js';
@@ -11,37 +13,132 @@ import {
   hideRatingModal 
 } from './ui.js';
 
-// Define a URL base da API
-const API = 'http://localhost:3000';
+// Configurações da API
+const API = 'http://localhost:3000/api';
+
+// Configuração padrão para fetch
+const fetchConfig = {
+  credentials: 'include',
+  mode: 'cors',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+};
+
+// Função helper para requisições autenticadas
+const fetchWithAuth = async (url, options = {}) => {
+  try {
+    const token = authService.getAccessToken();
+    const refreshToken = authService.getRefreshToken();
+    const headers = {
+      ...fetchConfig.headers,
+      ...options.headers,
+      'User-Agent': navigator.userAgent
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (refreshToken) {
+      headers['X-Refresh-Token'] = refreshToken;
+    }
+
+    if (authService.authState.sessionId) {
+      headers['X-Session-Id'] = authService.authState.sessionId;
+    }
+
+    console.log(`[Fetch] ${options.method || 'GET'} ${url}`);
+    if (options.body && !(options.body instanceof FormData)) {
+      console.log('[Fetch] Body:', options.body);
+    }
+
+    const config = {
+      ...fetchConfig,
+      ...options,
+      headers
+    };
+
+    // Para upload de arquivos, não incluir Content-Type
+    if (options.body instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
+    let response = await fetch(url, config);
+    
+    // Verificar se precisamos atualizar o access token
+    if (response.status === 401 && refreshToken) {
+      try {
+        console.log('[Fetch] Token expirado, tentando refresh...');
+        const newAccessToken = await authService.refreshTokens();
+        if (newAccessToken) {
+          config.headers['Authorization'] = `Bearer ${newAccessToken}`;
+          response = await fetch(url, config);
+        }
+      } catch (refreshError) {
+        console.error('[Refresh Token Error]', refreshError);
+        await authService.logout();
+        throw new Error('Sessão expirada - faça login novamente');
+      }
+    }
+
+    // Verificar header de novo access token
+    const newAccessToken = response.headers.get('X-New-Access-Token');
+    if (newAccessToken) {
+      authService.updateToken(newAccessToken);
+    }
+
+    if (!response.ok && response.status === 403) {
+      showNotification('Acesso negado', 'error');
+      if (window.location.pathname !== '/index.html') {
+        window.location.href = 'index.html';
+      }
+      return response;
+    }
+    
+    console.log(`[Response] Status: ${response.status} ${response.statusText}`);
+    return response;
+  } catch (error) {
+    console.error('[Fetch Error]', error);
+    if (error.message.includes('Sessão expirada')) {
+      showNotification(error.message, 'error');
+      window.location.href = 'login.html';
+    }
+    throw error;
+  }
+};
 
 // --- Movie Service ---
 const movieService = {
     // Busca filmes da API com paginação e parâmetros de busca opcionais
     async fetchMovies(params = {}) {
         try {
+            console.log('[Movies] Buscando filmes com params:', params);
+            
             const url = new URL(`${API}/movies`);
-            // Adiciona parâmetros de busca (page, limit, etc.)
             Object.entries(params).forEach(([key, value]) => {
                 if (value !== undefined && value !== null) {
                     url.searchParams.append(key, value);
                 }
             });
 
-            const response = await fetch(url);
+            const response = await fetchWithAuth(url);
 
             if (!response.ok) {
-                await handleApiError(response, 'Erro ao carregar filmes');
-                return { movies: [], totalPages: 1 };
+                throw new Error('Erro ao carregar filmes');
             }
 
             const data = await response.json();
-            const movies = data.movies || data || [];
-            const totalPages = data.totalPages || 1;
-
-            return { movies, totalPages };
+            console.log('[Movies] Filmes recebidos:', data);
+            
+            return {
+                movies: data.movies || data || [],
+                totalPages: data.totalPages || 1
+            };
         } catch (error) {
-            console.error('Erro ao buscar filmes:', error);
-            showNotification(error.message || 'Erro de comunicação ao buscar filmes', 'error');
+            console.error('[Movies Error]', error);
+            showNotification('Erro ao carregar filmes', 'error');
             return { movies: [], totalPages: 1 };
         }
     },
@@ -49,65 +146,60 @@ const movieService = {
     // Cria um novo filme
     async createMovie(movieData) {
         try {
-            console.log('[DEBUG] Dados brutos recebidos:', movieData);
+            console.log('[Create] Iniciando criação de filme...');
             
-            const token = authService.getToken();
-            if (!token) {
-                showNotification('Você precisa estar logado para adicionar um filme.', 'error');
+            if (!authService.isAuthenticated()) {
+                showNotification('Login necessário', 'error');
                 localStorage.setItem('redirectTo', window.location.pathname);
                 window.location.href = 'login.html';
                 return null;
             }
 
+            // Upload de imagem
             let imageUrl = null;
-            // Processamento de imagem
             if (movieData.imageFile) {
-                console.log('[DEBUG] Iniciando upload de imagem...');
+                console.log('[Create] Iniciando upload de imagem...');
                 imageUrl = await this.handleImageUpload(movieData.imageFile);
-                if (!imageUrl) {
-                    console.error('[ERRO] Upload de imagem falhou');
+                if (!imageUrl && movieData.imageFile) {
+                    console.error('[Create] Falha no upload da imagem');
                     return null;
                 }
-                console.log('[DEBUG] Imagem carregada com sucesso:', imageUrl);
+                console.log('[Create] Upload concluído:', imageUrl);
             }
 
-            // Construção do payload
+            // Preparar dados do filme
             const moviePayload = {
                 title: movieData.title.trim(),
                 description: movieData.description.trim(),
                 releaseYear: parseInt(movieData.releaseYear),
-                genre: movieData.genre || "", // Campo de gênero
-                director: movieData.director || "", // Adicionado campo de diretor
+                genre: movieData.genre?.trim() || "",
+                director: movieData.director?.trim() || "",
                 imageUrl: imageUrl
             };
 
-            console.log('[DEBUG] Payload final:', moviePayload);
+            console.log('[Create] Enviando dados do filme:', moviePayload);
 
-            // Requisição para API
-            const response = await fetch(`${API}/movies`, {
+            // Criar filme
+            const response = await fetchWithAuth(`${API}/movies`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify(moviePayload)
             });
 
-            console.log('[DEBUG] Status da resposta:', response.status);
-            const responseData = await response.json();
-            console.log('[DEBUG] Resposta completa:', responseData);
-
             if (!response.ok) {
-                throw new Error(responseData.message || 'Erro desconhecido na API');
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Erro ao criar filme');
             }
 
-            showNotification('Filme criado com sucesso! Redirecionando...', 'success', 2000);
+            const newMovie = await response.json();
+            console.log('[Create] Filme criado:', newMovie);
+            
+            showNotification('Filme criado com sucesso!', 'success');
             setTimeout(() => window.location.href = 'index.html', 2000);
-            return responseData;
 
+            return newMovie;
         } catch (error) {
-            console.error('[ERRO COMPLETO] Falha ao criar filme:', error);
-            showNotification(error.message || 'Erro crítico ao processar filme', 'error');
+            console.error('[Create Error]', error);
+            showNotification(error.message || 'Erro ao criar filme', 'error');
             return null;
         }
     },
@@ -115,84 +207,70 @@ const movieService = {
     // Busca detalhes de um filme específico
     async getMovieById(id) {
         try {
-            if (!id) {
-                throw new Error('ID do filme não fornecido');
-            }
+            console.log(`[Movie] Buscando filme ${id}`);
             
-            console.log(`Buscando detalhes do filme ID: ${id}`);
-            const response = await fetch(`${API}/movies/${id}`);
+            if (!id) throw new Error('ID do filme não fornecido');
+            
+            const response = await fetchWithAuth(`${API}/movies/${id}`);
             
             if (!response.ok) {
                 throw new Error('Filme não encontrado');
             }
             
             const movie = await response.json();
+            console.log('[Movie] Dados recebidos:', movie);
             return movie;
         } catch (error) {
-            console.error('Erro ao buscar detalhes do filme:', error);
+            console.error('[Movie Error]', error);
             showNotification(error.message, 'error');
             return null;
         }
     },
 
-    // Edita um filme existente - CORRIGIDO
-    // Apenas o método updateMovie atualizado
+    // Atualiza um filme existente
     async updateMovie(movieData) {
         try {
-            console.log('[DEBUG] Dados recebidos para atualização:', movieData);
+            console.log('[Update] Iniciando atualização...');
             
             if (!movieData.id) {
-                throw new Error('ID do filme não fornecido para atualização');
+                throw new Error('ID do filme não fornecido');
             }
             
-            const token = authService.getToken();
-            if (!token) {
-                showNotification('Você precisa estar logado para editar um filme.', 'error');
+            if (!authService.isAuthenticated()) {
+                showNotification('Login necessário', 'error');
                 localStorage.setItem('redirectTo', window.location.pathname);
                 window.location.href = 'login.html';
                 return null;
             }
 
+            // Upload de nova imagem se fornecida
             let imageUrl = null;
-            
-            // Processar imagem apenas se uma nova foi enviada
-            if (movieData.imageFile && movieData.imageFile.size > 0) {
-                console.log('[DEBUG] Processando nova imagem para upload...');
+            if (movieData.imageFile?.size > 0) {
+                console.log('[Update] Processando nova imagem...');
                 imageUrl = await this.handleImageUpload(movieData.imageFile);
-                if (!imageUrl) {
-                    console.error('[ERRO] Upload de imagem falhou');
-                    throw new Error('Falha no upload da imagem');
+                if (!imageUrl && movieData.imageFile) {
+                    console.error('[Update] Falha no upload da imagem');
+                    return null;
                 }
-                console.log('[DEBUG] Nova imagem processada:', imageUrl);
             }
 
-            // Construir payload para envio
+            // Preparar payload
             const payload = {
-                title: movieData.title,
-                description: movieData.description,
+                title: movieData.title?.trim(),
+                description: movieData.description?.trim(),
                 releaseYear: parseInt(movieData.releaseYear),
-                director: movieData.director || null,
-                genre: movieData.genre || null
+                director: movieData.director?.trim() || null,
+                genre: movieData.genre?.trim() || null
             };
             
-            // Adicionar URLs de imagem conforme necessário
-            if (imageUrl) {
-                // Se tem nova imagem, usá-la
+            if (imageUrl || movieData.clearImage) {
                 payload.imageUrl = imageUrl;
-            } else if (movieData.clearImage) {
-                // Se pediu para limpar, enviar null
-                payload.imageUrl = null;
             }
-            // Se keepExistingImage, não enviar imageUrl para manter a atual
             
-            console.log('[DEBUG] Payload de atualização:', payload);
+            console.log('[Update] Enviando dados:', payload);
 
-            const response = await fetch(`${API}/movies/${movieData.id}`, {
+            const response = await fetchWithAuth(`${API}/movies/${movieData.id}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
                 body: JSON.stringify(payload)
             });
 
@@ -202,129 +280,94 @@ const movieService = {
             }
 
             const updatedMovie = await response.json();
+            console.log('[Update] Filme atualizado:', updatedMovie);
+            
             showNotification('Filme atualizado com sucesso!', 'success');
             return updatedMovie;
         } catch (error) {
-            console.error('[ERRO] Falha ao atualizar filme:', error);
-            showNotification(error.message || 'Erro ao atualizar filme', 'error');
+            console.error('[Update Error]', error);
+            showNotification(error.message, 'error');
             throw error;
         }
     },
 
-    // Método para excluir um filme
+    // Exclui um filme
     async deleteMovie(movieId) {
-    try {
-        console.log('Iniciando exclusão do filme:', movieId);
-        
-        if (!movieId) {
-        console.error('ID do filme não informado');
-        showNotification('ID do filme não informado', 'error');
-        return false;
-        }
-        
-        // Verificar se o usuário está autenticado
-        if (!authService.isAuthenticated()) {
-        console.error('Usuário não autenticado');
-        showNotification('Você precisa estar logado para excluir filmes', 'error');
-        return false;
-        }
-        
-        const token = authService.getToken();
-        console.log('Token obtido para exclusão');
-        
-        // URL para fazer a exclusão do filme - CORRIGIDO: agora usamos API em vez de API_BASE_URL
-        const url = `${API}/movies/${movieId}`;
-        console.log('URL de exclusão:', url);
-        
-        // Fazer a requisição para a API para excluir o filme
-        const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-        });
-        
-        console.log('Resposta da API:', response.status, response.statusText);
-        
-        if (!response.ok) {
-        let errorMessage = 'Erro ao excluir o filme';
-        
         try {
-            const errorData = await response.json();
-            errorMessage = errorData.message || errorMessage;
-            console.error('Detalhes do erro:', errorData);
-        } catch (e) {
-            console.error('Não foi possível obter detalhes do erro:', e);
+            console.log(`[Delete] Iniciando exclusão do filme ${movieId}`);
+            
+            if (!movieId) {
+                throw new Error('ID do filme não fornecido');
+            }
+            
+            if (!authService.isAuthenticated()) {
+                showNotification('Login necessário', 'error');
+                return false;
+            }
+
+            const response = await fetchWithAuth(`${API}/movies/${movieId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Erro ao excluir filme');
+            }
+            
+            console.log('[Delete] Filme excluído com sucesso');
+            showNotification('Filme excluído com sucesso!', 'success');
+            return true;
+        } catch (error) {
+            console.error('[Delete Error]', error);
+            showNotification(error.message, 'error');
+            return false;
         }
-        
-        throw new Error(errorMessage);
-        }
-        
-        console.log('Filme excluído com sucesso!');
-        return true;
-    } catch (error) {
-        console.error('Erro ao excluir filme:', error);
-        showNotification(error.message || 'Erro ao excluir o filme. Tente novamente.', 'error');
-        return false;
-    }
     },
 
     // Upload de imagem
     async handleImageUpload(file) {
         if (!file) return null;
 
-        if (!file.type.startsWith('image/')) {
-            showNotification('Por favor, selecione um arquivo de imagem válido.', 'error');
-            return null;
-        }
-
         try {
-            const token = authService.getToken();
-            if (!token) {
-                showNotification('Você precisa estar logado para enviar imagens.', 'error');
-                localStorage.setItem('redirectTo', window.location.pathname);
-                window.location.href = 'login.html';
-                return null;
+            console.log('[Upload] Iniciando upload...', {
+                type: file.type,
+                size: file.size
+            });
+
+            if (!file.type.startsWith('image/')) {
+                throw new Error('Formato de arquivo inválido');
+            }
+
+            if (!authService.isAuthenticated()) {
+                throw new Error('Login necessário');
             }
 
             const formData = new FormData();
             formData.append('image', file);
 
-            const response = await fetch(`${API}/movies/upload`, {
+            console.log('[Upload] Enviando arquivo...');
+
+            const response = await fetchWithAuth(`${API}/movies/upload`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
                 body: formData
             });
 
             if (!response.ok) {
-                await handleApiError(response, 'Erro no upload da imagem');
-                return null;
+                throw new Error('Erro no upload da imagem');
             }
 
-            const { url } = await response.json();
-            showNotification('Imagem enviada com sucesso!', 'success', 1000);
-            return url;
-        } catch (error) {
-            console.error('Error uploading image:', error);
-            showNotification(error.message || 'Erro inesperado ao enviar imagem', 'error');
-            return null;
-        }
-    },
+            const data = await response.json();
+            console.log('[Upload] Resposta:', data);
 
-    // Busca detalhes de um filme
-    async getMovieDetails(id) {
-        try {
-            const response = await fetch(`${API}/movies/${id}`);
-            if (!response.ok) {
-                await handleApiError(response, 'Filme não encontrado');
-                return null;
+            if (!data.url) {
+                throw new Error('URL da imagem não recebida');
             }
-            return await response.json();
+
+            showNotification('Upload realizado com sucesso!', 'success');
+            return data.url;
         } catch (error) {
-            console.error('Error fetching movie details:', error);
-            showNotification(error.message || 'Erro ao carregar detalhes do filme', 'error');
+            console.error('[Upload Error]', error);
+            showNotification(error.message, 'error');
             return null;
         }
     }
@@ -332,88 +375,188 @@ const movieService = {
 
 // --- Review Service ---
 const reviewService = {
-    // Envia uma nova avaliação para um filme
     async submitReview(movieId, reviewData) {
         try {
-            const token = authService.getToken();
-            if (!token) {
-                showNotification('Você precisa estar logado para avaliar.', 'error');
+            console.log('[Review] Enviando avaliação...');
+            
+            if (!authService.isAuthenticated()) {
+                showNotification('Login necessário', 'error');
                 localStorage.setItem('redirectTo', window.location.pathname);
                 window.location.href = 'login.html';
                 return null;
             }
 
-            const response = await fetch(`${API}/movies/${movieId}/reviews`, {
+            const response = await fetchWithAuth(`${API}/movies/${movieId}/reviews`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
                 body: JSON.stringify({
                     rating: Number(reviewData.rating),
-                    comment: reviewData.comment
+                    comment: reviewData.comment?.trim()
                 })
             });
 
             if (!response.ok) {
-                await handleApiError(response, 'Erro ao enviar avaliação');
-                return null;
+                throw new Error('Erro ao enviar avaliação');
             }
 
             const newReview = await response.json();
+            console.log('[Review] Avaliação enviada:', newReview);
+            
             showNotification('Avaliação enviada com sucesso!', 'success');
             return newReview;
         } catch (error) {
-            console.error('Error submitting review:', error);
-            showNotification(error.message || 'Erro inesperado ao enviar avaliação', 'error');
+            console.error('[Review Error]', error);
+            showNotification(error.message, 'error');
             return null;
         }
     },
 
-    // Carrega avaliações para um filme específico
     async loadReviews(movieId) {
         try {
-            const response = await fetch(`${API}/movies/${movieId}/reviews`);
+            console.log(`[Reviews] Carregando avaliações do filme ${movieId}`);
+            
+            const response = await fetchWithAuth(`${API}/movies/${movieId}/reviews`);
+            
             if (!response.ok) {
-                await handleApiError(response, 'Erro ao carregar avaliações');
-                return [];
+                throw new Error('Erro ao carregar avaliações');
             }
-            return await response.json();
+            
+            const reviews = await response.json();
+            console.log('[Reviews] Avaliações carregadas:', reviews);
+            return reviews;
         } catch (error) {
-            console.error('Error loading reviews:', error);
-            showNotification(error.message || 'Erro inesperado ao carregar avaliações', 'error');
+            console.error('[Reviews Error]', error);
+            showNotification(error.message, 'error');
             return [];
         }
     },
 
-    // Exclui uma avaliação
     async deleteReview(movieId, reviewId) {
         try {
-            const token = authService.getToken();
-            if (!token) {
-                showNotification('Você precisa estar logado para excluir avaliações.', 'error');
-                localStorage.setItem('redirectTo', window.location.pathname);
-                window.location.href = 'login.html';
+            console.log(`[Review] Excluindo avaliação ${reviewId}`);
+            
+            if (!authService.isAuthenticated()) {
+                showNotification('Login necessário', 'error');
                 return false;
             }
 
-            const response = await fetch(`${API}/movies/${movieId}/reviews/${reviewId}`, {
-                method: 'DELETE',
+            const response = await fetchWithAuth(`${API}/movies/${movieId}/reviews/${reviewId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('Erro ao excluir avaliação');
+            }
+
+            console.log('[Review] Avaliação excluída com sucesso');
+            showNotification('Avaliação excluída com sucesso!', 'success');
+            return true;
+        } catch (error) {
+            console.error('[Review Delete Error]', error);
+            showNotification(error.message, 'error');
+            return false;
+        }
+    }
+};
+
+// --- Session Service ---
+const sessionService = {
+    async getSessions() {
+        try {
+            if (!authService.isAuthenticated()) {
+                throw new Error('Login necessário');
+            }
+
+            const response = await fetch(`${API}/users/sessions`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${authService.getAccessToken()}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
                 }
             });
 
             if (!response.ok) {
-                await handleApiError(response, 'Erro ao excluir avaliação');
-                return false;
+                throw new Error('Erro ao carregar sessões');
             }
 
-            showNotification('Avaliação excluída com sucesso!', 'success');
+            return await response.json();
+        } catch (error) {
+            console.error('[Sessions Error]', error);
+            showNotification(error.message, 'error');
+            return [];
+        }
+    },
+
+    async terminateSession(sessionId) {
+        try {
+            if (!authService.isAuthenticated()) {
+                throw new Error('Login necessário');
+            }
+
+            // Usando fetch diretamente com os headers mínimos necessários
+            const response = await fetch(`${API}/users/sessions/${sessionId}?_method=DELETE`, {
+                method: 'POST', // Mudando para POST para evitar problemas com o express-file-upload
+                headers: {
+                    'Authorization': `Bearer ${authService.getAccessToken()}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Erro ao encerrar sessão');
+            }
+
+            showNotification('Sessão encerrada com sucesso', 'success');
+            
+            if (sessionId === authService.authState.sessionId) {
+                await authService.logout();
+                window.location.href = 'login.html';
+                return true;
+            }
+
             return true;
         } catch (error) {
-            console.error('Error deleting review:', error);
-            showNotification(error.message || 'Erro inesperado ao excluir avaliação', 'error');
+            console.error('[Terminate Session Error]', error);
+            showNotification(error.message, 'error');
+            return false;
+        }
+    },
+
+    async terminateAllSessions() {
+        try {
+            if (!authService.isAuthenticated()) {
+                throw new Error('Login necessário');
+            }
+
+            // Usando fetch diretamente com os headers mínimos necessários
+            const response = await fetch(`${API}/users/sessions?_method=DELETE`, {
+                method: 'POST', // Mudando para POST para evitar problemas com o express-file-upload
+                headers: {
+                    'Authorization': `Bearer ${authService.getAccessToken()}`,
+                    'X-Refresh-Token': authService.getRefreshToken(),
+                    'X-Session-Id': authService.authState.sessionId,
+                    'User-Agent': navigator.userAgent
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Erro ao encerrar todas as sessões');
+            }
+
+            showNotification('Todas as sessões foram encerradas', 'success');
+            
+            // Adicionando um pequeno delay antes do logout
+            setTimeout(async () => {
+                await authService.logout();
+                window.location.href = 'login.html';
+            }, 1000);
+
+            return true;
+        } catch (error) {
+            console.error('[Terminate All Sessions Error]', error);
+            showNotification(error.message, 'error');
             return false;
         }
     }
@@ -427,36 +570,37 @@ const pagination = {
     movieGridContainer: null,
 
     init(paginationContainerId = 'pagination', movieGridContainerId = 'movie-grid') {
+        console.log('[Pagination] Inicializando...');
+        
         this.paginationContainer = document.getElementById(paginationContainerId);
+        this.movieGridContainer = document.getElementById(movieGridContainerId);
+        
         if (this.paginationContainer) {
             this.setupEventListeners();
         }
-
-        this.movieGridContainer = document.getElementById(movieGridContainerId);
+        
         if (!this.movieGridContainer) {
-            console.error(`Container do grid de filmes #${movieGridContainerId} não encontrado.`);
+            console.error(`[Pagination] Container #${movieGridContainerId} não encontrado`);
         }
     },
 
     setupEventListeners() {
-        if (this.paginationContainer) {
-            this.paginationContainer.addEventListener('click', (event) => {
-                const target = event.target;
-                if (target.tagName === 'BUTTON') {
-                    if (target.classList.contains('prev-page')) {
-                        this.loadPage(this.currentPage - 1);
-                    } else if (target.classList.contains('next-page')) {
-                        this.loadPage(this.currentPage + 1);
-                    }
+        this.paginationContainer?.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target.tagName === 'BUTTON') {
+                if (target.classList.contains('prev-page')) {
+                    this.loadPage(this.currentPage - 1);
+                } else if (target.classList.contains('next-page')) {
+                    this.loadPage(this.currentPage + 1);
                 }
-            });
-        }
+            }
+        });
     },
 
     async loadPage(page) {
         if (!this.movieGridContainer || page < 1 || page > this.totalPages) return;
 
-        console.log(`Carregando página ${page}...`);
+        console.log(`[Pagination] Carregando página ${page}`);
         this.movieGridContainer.innerHTML = '<p class="message info">Carregando filmes...</p>';
 
         const { movies, totalPages } = await movieService.fetchMovies({ page });
@@ -468,45 +612,88 @@ const pagination = {
     },
 
     updatePaginationUI() {
+        if (!this.paginationContainer) return;
+        
         if (this.totalPages <= 1) {
-          this.paginationContainer.style.display = 'none'; // Oculta se não houver paginação
-          return;
+            this.paginationContainer.style.display = 'none';
+            return;
         }
-        // ... código existente
-      }
+
+        this.paginationContainer.style.display = 'flex';
+        
+        this.paginationContainer.innerHTML = `
+            <button class="prev-page" ${this.currentPage <= 1 ? 'disabled' : ''}>
+                Anterior
+            </button>
+            <span class="page-info">
+                Página ${this.currentPage} de ${this.totalPages}
+            </span>
+            <button class="next-page" ${this.currentPage >= this.totalPages ? 'disabled' : ''}>
+                Próxima
+            </button>
+        `;
     }
+};
 
-
-// --- Inicialização da Página Inicial ---
+// --- Inicialização ---
 const initHomePage = async () => {
-    console.log('[INIT] Iniciando página inicial...');
+    console.log('[Init] Iniciando página inicial...');
     try {
-        pagination.init('pagination', 'movie-grid');
+        pagination.init();
         if (pagination.movieGridContainer) {
             await pagination.loadPage(1);
         }
     } catch (error) {
-        console.error('[ERRO] Falha na inicialização:', error);
-        showNotification('Falha ao carregar catálogo de filmes', 'error');
+        console.error('[Init Error]', error);
+        showNotification('Erro ao carregar filmes', 'error');
     }
 };
 
-// --- Execução na Inicialização ---
+// Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[INIT] Inicialização do sistema');
+    console.log('[Init] Inicialização do sistema');
+    
+    // Aguardar inicialização do auth service
+    await new Promise(resolve => {
+        if (window.navbarInitialized) {
+            resolve();
+        } else {
+            window.addEventListener('auth-initialized', () => resolve(), { once: true });
+        }
+    });
+
     const pathname = window.location.pathname;
     
     try {
+        // Verificar autenticação para páginas protegidas
+        if (pathname.endsWith('add.html') || 
+            pathname.endsWith('edit.html') || 
+            pathname.endsWith('profile.html') ||
+            pathname.endsWith('sessions.html')) {
+            
+            if (!authService.isAuthenticated()) {
+                localStorage.setItem('redirectTo', pathname);
+                window.location.href = 'login.html';
+                return;
+            }
+        }
+
+        // Verificar permissões de admin
+        if (pathname.endsWith('admin.html') && !authService.isAdmin()) {
+            showNotification('Acesso restrito', 'error');
+            window.location.href = 'index.html';
+            return;
+        }
+
+        // Inicializar página específica
         if (pathname === '/' || pathname.endsWith('index.html')) {
             await initHomePage();
         }
-        else if (pathname.endsWith('add.html')) {
-            console.log('[INIT] Modo de adição de filme');
-        }
     } catch (error) {
-        console.error('[ERRO CRÍTICO] Falha na inicialização:', error);
-        showNotification('Erro crítico no carregamento da página', 'error');
+        console.error('[Init Error]', error);
+        showNotification('Erro no carregamento', 'error');
     }
 });
 
-export { movieService, pagination, reviewService };
+// Exportar serviços
+export { movieService, reviewService, sessionService, pagination };

@@ -1,3 +1,4 @@
+// schema.prisma atualizado
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,16 +10,19 @@ datasource db {
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
+  id            Int            @id @default(autoincrement())
   name          String
-  email         String   @unique
+  email         String        @unique
   password      String
-  role          String   @default("USER") // Novo campo para role do usuário (USER ou ADMIN)
+  role          String        @default("USER")
   avatarUrl     String?
-  createdAt     DateTime @default(now()) @db.Timestamp(6)
-  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+  createdAt     DateTime      @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime      @updatedAt @db.Timestamp(6)
   reviews       Review[]
   addedMovies   Movie[]
+  sessions      Session[]
+  refreshTokens RefreshToken[]
+  isActive      Boolean       @default(true)
 }
 
 model Movie {
@@ -45,6 +49,38 @@ model Review {
   movieId   Int
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  createdAt     DateTime @default(now()) @db.Timestamp(6)
-  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId Int
+  expiresAt DateTime
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+  isRevoked Boolean  @default(false)
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model Session {
+  id           Int            @id @default(autoincrement())
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  deviceInfo   String
+  lastActivity DateTime       @default(now())
+  isActive     Boolean        @default(true)
+  ipAddress    String?
+  userAgent    String?        @db.Text
+  createdAt    DateTime       @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamp(6)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
 }
