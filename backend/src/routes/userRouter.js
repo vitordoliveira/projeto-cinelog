@@ -49,16 +49,17 @@ router.get(
   asyncHandler(getSessionsController)
 );
 
+// ADICIONADO: Encerrar TODAS as sessões do usuário logado (DELETE /sessions)
+router.delete(
+  '/sessions',
+  auth,
+  asyncHandler(logoutAllSessionsController)
+);
+
 router.delete(
   '/sessions/:sessionId',
   auth,
   asyncHandler(terminateSessionController)
-);
-
-router.post(
-  '/logout-all',
-  auth,
-  asyncHandler(logoutAllSessionsController)
 );
 
 // Rotas protegidas (requerem autenticação)

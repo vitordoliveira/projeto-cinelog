@@ -25,11 +25,11 @@ cloudinary.config({
 
 /**
  * Faz upload de uma imagem para o Cloudinary
- * @param {Buffer|string} input - Buffer da imagem ou caminho do arquivo
+ * @param {Buffer} fileBuffer - Buffer do arquivo
  * @param {string} folder - Pasta opcional no Cloudinary
  * @returns {Promise<Object>} Resultado do upload
  */
-export const uploadImage = async (input, folder = '') => {
+export const uploadImage = async (fileBuffer, folder = '') => {
   try {
     console.log('📤 [Cloudinary] Iniciando upload...');
 
@@ -49,30 +49,22 @@ export const uploadImage = async (input, folder = '') => {
       options.folder = folder;
     }
 
-    // Se for um Buffer, usar upload_stream
-    if (Buffer.isBuffer(input)) {
-      return new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          options,
-          (error, result) => {
-            if (error) {
-              console.error('❌ [Cloudinary] Erro no upload:', error);
-              reject(error);
-            } else {
-              console.log('✅ [Cloudinary] Upload bem-sucedido:', result.secure_url);
-              resolve(result);
-            }
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        options,
+        (error, result) => {
+          if (error) {
+            console.error('❌ [Cloudinary] Erro no upload:', error);
+            reject(error);
+          } else {
+            console.log('✅ [Cloudinary] Upload bem-sucedido:', result.secure_url);
+            resolve(result);
           }
-        );
+        }
+      );
 
-        uploadStream.end(input);
-      });
-    }
-    
-    // Se for um caminho de arquivo
-    const result = await cloudinary.uploader.upload(input, options);
-    console.log('✅ [Cloudinary] Upload bem-sucedido:', result.secure_url);
-    return result;
+      uploadStream.end(fileBuffer);
+    });
 
   } catch (error) {
     console.error('❌ [Cloudinary] Erro no upload:', error);

@@ -4,7 +4,7 @@ import { showNotification } from './utils.js';
 import { authService } from './auth.js';
 
 // Constantes para configuração de imagem
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_IMAGE_DIMENSION = 1920; // Máxima dimensão permitida
 const JPEG_QUALITY = 0.8; // Qualidade da compressão JPEG
 

@@ -17,10 +17,10 @@ export const validateUpload = (fieldName = 'image') => (req, res, next) => {
     });
   }
 
-  if (file.size > 5 * 1024 * 1024) { // 5MB
+  if (file.size > 10 * 1024 * 1024) { // 10MB
     console.log('❌ ValidateUpload - Arquivo muito grande:', file.size);
     return res.status(400).json({ 
-      error: 'Arquivo muito grande. Máximo de 5MB permitido' 
+      error: 'Arquivo muito grande. Máximo de 10MB permitido' 
     });
   }
 

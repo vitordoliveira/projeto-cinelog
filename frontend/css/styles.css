@@ -18,6 +18,7 @@
   --warning-color: #FF9800;
 }
 
+
 /* ===== RESET & BASE STYLES ===== */
 * {
   margin: 0;
@@ -33,7 +34,7 @@ body {
 }
 
 body.dark-bg {
-  background-color: var(--letterboxd-bg);
+  background-color: var(--dark-bg);
 }
 
 /* ===== NAVIGATION ===== */
@@ -347,16 +348,6 @@ main {
   color: #fff;
 }
 
-.movie-detail-container::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 400px;
-  background: linear-gradient(to bottom, rgba(20,24,28,0.5) 0%, rgba(20,24,28,1) 100%);
-  z-index: -1;
-}
 
 /* Layout de cabeçalho com grid para melhor controle de espaço */
 .movie-header {
@@ -521,7 +512,7 @@ main {
 
 /* Cards de review */
 .review-card, .review {
-  background: var(--review-bg);
+  background: #14181c;
   border-radius: 4px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
@@ -677,7 +668,7 @@ main {
 .review-form-container {
   margin: 0;
   padding: 0;
-  background-color: #1d232a;
+  background-color: var(--card-bg);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
@@ -854,9 +845,9 @@ main {
   max-width: 800px;
   margin: 0 auto;
   padding: 30px;
-  background-color: #1d232a;
+  background-color: var(--card-bg);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(145, 27, 27, 0.15);
   box-sizing: border-box;
 }
 
@@ -889,7 +880,7 @@ main {
   padding: 12px;
   border: 1px solid #2c3440;
   border-radius: 4px;
-  background-color: #14181c;
+  background-color: var(--dark-bg);
   color: #fff;
   font-family: inherit;
   font-size: 16px;
@@ -1119,7 +1110,7 @@ main {
 }
 
 .profile-header {
-  background-color: #1d232a;
+  background-color: var(--card-bg);
   border-radius: 8px;
   padding: 30px;
   margin-bottom: 30px;
@@ -1281,7 +1272,7 @@ main {
 
 /* Conteúdo das tabs */
 .profile-section {
-  background-color: #1d232a;
+  background-color: var(--card-bg);
   border-radius: 8px;
   padding: 30px;
   margin-bottom: 30px;
@@ -1464,7 +1455,7 @@ main {
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2680,7 +2671,7 @@ textarea::-webkit-scrollbar-track {
 
 #admin-panel th {
   padding: 1rem;
-  text-align: left;
+  text-align: center;
   color: var(--text-light);
   font-weight: 500;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -2688,7 +2679,7 @@ textarea::-webkit-scrollbar-track {
 
 #admin-panel td {
   padding: 1rem;
-  text-align: left;
+  text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--text-light);
 }
@@ -2703,7 +2694,7 @@ textarea::-webkit-scrollbar-track {
 
 /* Botões de ação nas tabelas */
 .user-actions {
-  display: flex;
+  display: block;
   gap: 0.5rem;
   align-items: center;
 }

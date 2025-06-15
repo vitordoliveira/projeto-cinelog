@@ -6,6 +6,7 @@ const API_URL = 'http://localhost:3000/api';
 
 // Controle de inicialização
 let initialized = false;
+let initializationInProgress = false;
 
 // Helper para requisições autenticadas
 async function fetchWithAuth(url, options = {}) {
@@ -51,9 +52,12 @@ async function fetchWithAuth(url, options = {}) {
   return response;
 }
 
-// Função principal para inicializar a página
+// Função principal de inicialização - CORRIGIDA
 function init() {
-  if (initialized) return;
+  if (initialized || initializationInProgress) return;
+  
+  initializationInProgress = true;
+  console.log('Iniciando verificação de admin...');
   
   // Buscar elementos DOM
   const adminPanel = document.getElementById('admin-panel');
@@ -62,34 +66,108 @@ function init() {
   
   if (!adminPanel || !accessDenied || !loginRequired) {
     console.error('Elementos principais não encontrados');
+    initializationInProgress = false;
     return;
   }
   
-  // Verificar autenticação
-  if (!authService.isAuthenticated()) {
-    adminPanel.style.display = 'none';
-    accessDenied.style.display = 'none';
+  // CORREÇÃO PRINCIPAL: Esconder TODOS os elementos primeiro
+  adminPanel.style.display = 'none';
+  accessDenied.style.display = 'none';
+  loginRequired.style.display = 'none';
+  
+  // Verificar se temos informações no localStorage primeiro
+  let authData;
+  try {
+    authData = JSON.parse(localStorage.getItem('auth') || '{}');
+  } catch (e) {
+    authData = {};
+  }
+  
+  // Se não tem dados no localStorage, redirecionar para login
+  if (!authData.accessToken) {
+    console.log('Não autenticado - redirecionando');
     loginRequired.style.display = 'block';
     localStorage.setItem('redirectTo', 'admin.html');
+    setTimeout(() => {
+      window.location.href = 'login.html';
+    }, 1000);
+    initializationInProgress = false;
     return;
   }
   
-  // Verificar se é admin
-  if (!authService.isAdmin()) {
-    adminPanel.style.display = 'none';
+  // Se não é admin no localStorage, mostrar acesso negado
+  if (!authData.user || authData.user.role !== 'ADMIN') {
+    console.log('Não é admin - acesso negado');
     accessDenied.style.display = 'block';
-    loginRequired.style.display = 'none';
+    initializationInProgress = false;
     return;
+  }
+  
+  // Verificar também no authService se estiver disponível
+  if (authService.authState.currentUser) {
+    if (!authService.isAdmin()) {
+      console.log('AuthService confirma: não é admin');
+      accessDenied.style.display = 'block';
+      initializationInProgress = false;
+      return;
+    }
   }
   
   // É admin, mostrar painel
+  console.log('Usuário é admin - mostrando painel');
   adminPanel.style.display = 'block';
-  accessDenied.style.display = 'none';
-  loginRequired.style.display = 'none';
   
   // Inicializar tabs e carregar dados
   initTabs();
   initialized = true;
+  initializationInProgress = false;
+}
+
+// Função de verificação única e definitiva
+function performSingleAuthCheck() {
+  console.log('Executando verificação única de autenticação...');
+  
+  // Primeiro, esconder tudo
+  const adminPanel = document.getElementById('admin-panel');
+  const accessDenied = document.getElementById('access-denied');
+  const loginRequired = document.getElementById('login-required');
+  
+  if (adminPanel) adminPanel.style.display = 'none';
+  if (accessDenied) accessDenied.style.display = 'none';
+  if (loginRequired) loginRequired.style.display = 'none';
+  
+  // Aguardar um momento para garantir que não há outras verificações rodando
+  setTimeout(() => {
+    let authData;
+    try {
+      authData = JSON.parse(localStorage.getItem('auth') || '{}');
+    } catch (e) {
+      authData = {};
+    }
+    
+    console.log('Dados de autenticação:', {
+      hasToken: !!authData.accessToken,
+      hasUser: !!authData.user,
+      userRole: authData.user?.role
+    });
+    
+    if (!authData.accessToken) {
+      console.log('RESULTADO: Login necessário');
+      if (loginRequired) loginRequired.style.display = 'block';
+      localStorage.setItem('redirectTo', 'admin.html');
+      setTimeout(() => window.location.href = 'login.html', 1500);
+    } else if (!authData.user || authData.user.role !== 'ADMIN') {
+      console.log('RESULTADO: Acesso negado');
+      if (accessDenied) accessDenied.style.display = 'block';
+    } else {
+      console.log('RESULTADO: Admin confirmado');
+      if (adminPanel) adminPanel.style.display = 'block';
+      if (!initialized) {
+        initTabs();
+        initialized = true;
+      }
+    }
+  }, 100);
 }
 
 // Inicializar tabs
@@ -139,48 +217,17 @@ function initTabs() {
   }
 }
 
-// Evento DOMContentLoaded
+// Evento DOMContentLoaded - CORRIGIDO
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM carregado');
+  console.log('DOM carregado para admin.js');
   
-  // Aguardar inicialização da autenticação
-  if (window.navbarInitialized) {
-    init();
-  } else {
-    window.addEventListener('auth-initialized', () => {
-      setTimeout(init, 100);
-    });
-  }
-  
-  // Verificar visibilidade a cada 2 segundos - limitado a 10 tentativas
-  let attempts = 0;
-  const checkInterval = setInterval(() => {
-    if (attempts >= 10) {
-      clearInterval(checkInterval);
-      return;
-    }
-    
-    attempts++;
-    
-    const adminPanel = document.getElementById('admin-panel');
-    const accessDenied = document.getElementById('access-denied');
-    
-    if (authService.isAdmin()) {
-      if (accessDenied && accessDenied.style.display !== 'none') {
-        accessDenied.style.display = 'none';
-      }
-      
-      if (adminPanel && adminPanel.style.display !== 'block') {
-        adminPanel.style.display = 'block';
-        if (!initialized) {
-          init();
-        }
-      }
-    }
-  }, 2000);
+  // Aguardar um pouco para evitar conflitos com outras inicializações
+  setTimeout(() => {
+    performSingleAuthCheck();
+  }, 200);
 });
 
-// Funções para carregar e gerenciar dados
+// Resto das funções permanecem iguais...
 async function loadUsers() {
   try {
     console.log('Carregando usuários...');
@@ -287,8 +334,7 @@ async function loadUsers() {
   }
 }
 
-// O restante das funções permanece o mesmo...
-
+// Manter todas as outras funções como estavam...
 function renderUsersTable(users) {
   const tableBody = document.querySelector('#users-table tbody');
   
@@ -356,6 +402,7 @@ function renderUsersTable(users) {
   }
 }
 
+// Todas as outras funções permanecem iguais (loadReviews, loadMovies, etc.)
 async function loadReviews() {
   try {
     console.log('Carregando avaliações...');

@@ -547,7 +547,7 @@ function createInitialAvatar(element, initial) {
         justify-content: center;
         width: 100%;
         height: 100%;
-        background-color: ${bgColor};
+        background-color: white;
         color: white;
         font-weight: bold;
         border-radius: 50%;

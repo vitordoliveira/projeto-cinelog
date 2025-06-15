@@ -1,10 +1,8 @@
-// js/components.js
-
 // Componente de navegação reutilizável
 export function renderNavbar(currentPage) {
   const navbar = document.createElement('header');
   navbar.className = 'navbar';
-  
+
   navbar.innerHTML = `
     <a href="index.html" class="logo-link">
       <div class="logo-container">
@@ -20,31 +18,25 @@ export function renderNavbar(currentPage) {
     </a>
     <nav>
       <a href="index.html" class="${currentPage === 'home' ? 'active' : ''}">Início</a>
-      <a href="add.html" data-auth="authenticated" class="${currentPage === 'add' ? 'active' : ''}">Adicionar Filme</a>
-      <a href="profile.html" data-auth="authenticated" class="${currentPage === 'profile' ? 'active' : ''}">Perfil</a>
-      <!-- Novo link para o painel de administração - apenas para admins -->
-      <a href="admin.html" data-auth="admin" class="${currentPage === 'admin' ? 'active' : ''}">Administração</a>
-      <a href="#" id="logout-link" data-auth="authenticated">Sair</a>
-      <a href="login.html" data-auth="unauthenticated" class="${currentPage === 'login' ? 'active' : ''}">Login</a>
-      <a href="register.html" data-auth="unauthenticated" class="${currentPage === 'register' ? 'active' : ''}">Cadastrar</a>
+      <a href="add.html" data-auth="authenticated" style="display:none" class="${currentPage === 'add' ? 'active' : ''}">Adicionar Filme</a>
+      <a href="profile.html" data-auth="authenticated" style="display:none" class="${currentPage === 'profile' ? 'active' : ''}">Perfil</a>
+      <a href="admin.html" data-auth="admin" style="display:none" class="${currentPage === 'admin' ? 'active' : ''}">Administração</a>
+      <a href="#" id="logout-link" data-auth="authenticated" style="display:none">Sair</a>
+      <a href="login.html" data-auth="unauthenticated" style="display:none" class="${currentPage === 'login' ? 'active' : ''}">Login</a>
+      <a href="register.html" data-auth="unauthenticated" style="display:none" class="${currentPage === 'register' ? 'active' : ''}">Cadastrar</a>
     </nav>
   `;
-  
   return navbar;
 }
 
-// Função para inicializar o componente da navbar em todas as páginas
 export function initializeNavbar() {
-  // Verifica se a navbar já existe para evitar duplicação
-  if (document.querySelector('header.navbar')) {
-    console.log('Navbar já existe, ignorando inicialização duplicada');
-    return;
-  }
+  // Remove navbar duplicada se houver (garantia)
+  document.querySelectorAll('header.navbar').forEach((el, i) => { if(i > 0) el.remove(); });
+  if (document.querySelector('header.navbar')) return;
 
-  // Determinar a página atual com base no URL
   const path = window.location.pathname;
   let currentPage = 'home';
-  
+
   if (path.includes('movie-detail.html')) {
     currentPage = 'detail';
     document.body.classList.add('movie-detail-page');
@@ -61,20 +53,28 @@ export function initializeNavbar() {
     currentPage = 'register';
     document.body.classList.add('register-page');
   }
-  
-  // Renderizar a navbar no início do body
+
   const navbar = renderNavbar(currentPage);
   document.body.prepend(navbar);
-  
-  // Configurar o event listener de logout
+
+  // Logout event
   const logoutLink = document.getElementById('logout-link');
   if (logoutLink) {
     logoutLink.addEventListener('click', (e) => {
       e.preventDefault();
-      // Importamos dinamicamente o authService para evitar dependências circulares
       import('./auth.js').then(module => {
         module.authService.logout();
       });
     });
   }
+
+  // Só mostra as abas corretas após auth inicializar de fato
+  import('./auth.js').then(module => {
+    // Atualiza UI só depois do evento auth-initialized
+    const runUiUpdate = () => module.authService.updateAuthUI();
+    // Força update APÓS navbar estar inserida
+    setTimeout(runUiUpdate, 0);
+    window.addEventListener('auth-initialized', runUiUpdate);
+    window.addEventListener('auth-state-changed', runUiUpdate);
+  });
 }

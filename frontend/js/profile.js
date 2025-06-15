@@ -172,56 +172,37 @@ const profileService = {
                 return null;
             }
 
-            let response = await fetch(`${API}/users/${currentUser.id}/avatar`, {
+            const response = await fetch(`${API}/users/${currentUser.id}/avatar`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'X-Refresh-Token': authService.getRefreshToken(),
                     'X-Session-Id': authService.authState.sessionId,
                     'User-Agent': navigator.userAgent
+                    // Removido o Content-Type para permitir que o navegador defina corretamente para multipart/form-data
                 },
                 body: formData
             });
 
-            if (response.status === 404) {
-                console.log('Endpoint de upload não disponível, tentando gerar avatar por nome...');
+            // Trata a resposta
+            const data = await response.json();
                 
-                response = await fetch(`${API}/users/${currentUser.id}/avatar/generate`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'X-Refresh-Token': authService.getRefreshToken(),
-                        'X-Session-Id': authService.authState.sessionId,
-                        'User-Agent': navigator.userAgent,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (!response.ok) {
-                    showNotification('Gerando avatar localmente...', 'info');
-                    console.log('Gerando avatar localmente (backend não implementado)');
-                    
-                    const user = authService.authState.currentUser;
-                    const mockAvatarUrl = 'https://ui-avatars.com/api/?name=' + 
-                        encodeURIComponent(user.name) + '&background=2c3440&color=fff&size=200';
-                    
-                    return {
-                        user: {
-                            ...user,
-                            avatarUrl: mockAvatarUrl
-                        }
-                    };
-                }
-            }
-            
             if (response.ok) {
                 showNotification('Foto de perfil atualizada com sucesso!', 'success');
-                return await response.json();
+                return data;
             }
             
+            // Se houver erro, tenta gerar avatar
+            if (response.status === 404) {
+                console.log('Endpoint de upload não disponível, tentando gerar avatar por nome...');
+                return await this.generateAvatar();
+            }
+            
+            // Trata outros erros
             console.warn('Erro ao fazer upload de avatar:', response.status);
-            showNotification('Não foi possível atualizar sua foto de perfil', 'error');
+            showNotification(data.error || 'Não foi possível atualizar sua foto de perfil', 'error');
             return null;
+
         } catch (error) {
             console.error('Erro ao fazer upload de avatar:', error);
             showNotification('Falha ao atualizar foto de perfil', 'error');

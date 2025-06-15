@@ -6,13 +6,11 @@
   <title>Painel de Administração - CineLog</title>
   <link rel="stylesheet" href="./css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-  <!-- Adicionado script inicial para garantir visibilidade correta -->
+  <!-- Script inicial CORRIGIDO -->
   <script>
-    // Ler estado atual da autenticação direto do localStorage
     (function() {
       try {
-        const auth = JSON.parse(localStorage.getItem('auth') || '{}');
-        // Ocultar todos os painéis inicialmente, até determinar qual mostrar
+        // Ocultar todos os painéis inicialmente
         document.addEventListener('DOMContentLoaded', function() {
           document.getElementById('admin-panel').style.display = 'none';
           document.getElementById('access-denied').style.display = 'none';
@@ -25,7 +23,7 @@
   </script>
 </head>
 <body>
-  <!-- Notification Container (usado por utils.js showNotification) -->
+  <!-- Notification Container -->
   <div id="notification-container"></div>
 
   <!-- Navbar placeholder -->
@@ -115,7 +113,7 @@
     </section>
   </main>
   
-  <!-- Modal de confirmação para ações críticas -->
+  <!-- Modal de confirmação -->
   <div id="confirm-modal" class="modal">
     <div class="modal-content">
       <h3 id="modal-title">Confirmar Ação</h3>
@@ -131,104 +129,67 @@
   <script type="module" src="./js/utils.js"></script>
   <script type="module" src="./js/auth.js"></script>
   
-  <!-- Inicialização da interface -->
+  <!-- Inicialização CORRIGIDA -->
   <script type="module">
     import { initializeNavbar } from './js/components.js';
     import { authService } from './js/auth.js';
     
-    // Espera todos os elementos serem carregados
+    // Variável para controlar se já foi executado
+    let authCheckExecuted = false;
+    
     document.addEventListener('DOMContentLoaded', () => {
       console.log('DOM carregado, inicializando navbar...');
       initializeNavbar();
       
-      // Verificar diretamente o localStorage para determinar visibilidade inicial
-      const checkAuthAndShowPanel = () => {
+      // FUNÇÃO ÚNICA DE VERIFICAÇÃO
+      const performAuthCheck = () => {
+        if (authCheckExecuted) return; // Evita execução múltipla
+        authCheckExecuted = true;
+        
         try {
           const auth = JSON.parse(localStorage.getItem('auth') || '{}');
           const adminPanel = document.getElementById('admin-panel');
           const accessDenied = document.getElementById('access-denied');
           const loginRequired = document.getElementById('login-required');
           
+          console.log('Dados auth:', {
+            hasAccessToken: !!auth.accessToken,
+            hasUser: !!auth.user,
+            userRole: auth.user?.role
+          });
+          
+          // CORREÇÃO: usar accessToken em vez de token
           if (auth && auth.user && auth.user.role === 'ADMIN') {
-            console.log('Verificação direta: Usuário é admin');
+            console.log('✅ Usuário é admin');
             adminPanel.style.display = 'block';
             accessDenied.style.display = 'none';
             loginRequired.style.display = 'none';
-          } else if (auth && auth.token) {
-            console.log('Verificação direta: Usuário autenticado, não é admin');
+          } else if (auth && auth.accessToken) { // CORRIGIDO aqui
+            console.log('❌ Usuário autenticado, mas não é admin');
             adminPanel.style.display = 'none';
             accessDenied.style.display = 'block';
             loginRequired.style.display = 'none';
           } else {
-            console.log('Verificação direta: Usuário não autenticado');
+            console.log('🔐 Usuário não autenticado');
             adminPanel.style.display = 'none';
             accessDenied.style.display = 'none';
             loginRequired.style.display = 'block';
           }
         } catch (e) {
           console.error('Erro ao verificar autenticação:', e);
-        }
-      };
-      
-      // Verificar imediatamente e também após um pequeno atraso
-      checkAuthAndShowPanel();
-      setTimeout(checkAuthAndShowPanel, 500);
-      
-      // Verificar estado do auth depois de 1,5 segundos (fallback)
-      setTimeout(() => {
-        console.log('Verificação baseada no authService');
-        if (authService.isAuthenticated()) {
-          if (authService.isAdmin()) {
-            document.getElementById('admin-panel').style.display = 'block';
-            document.getElementById('access-denied').style.display = 'none';
-            document.getElementById('login-required').style.display = 'none';
-          } else {
-            document.getElementById('admin-panel').style.display = 'none';
-            document.getElementById('access-denied').style.display = 'block';
-            document.getElementById('login-required').style.display = 'none';
-          }
-        } else {
+          // Em caso de erro, mostrar login required
           document.getElementById('admin-panel').style.display = 'none';
           document.getElementById('access-denied').style.display = 'none';
           document.getElementById('login-required').style.display = 'block';
         }
-        
-        // Forçar atualização da UI
-        authService.updateAuthUI();
-      }, 1500);
-    });
-  </script>
-  
-  <!-- Scripts específicos -->
-  <script type="module" src="./js/admin.js"></script>
-  
-  <!-- Script direto para garantir visibilidade correta -->
-  <script>
-    // Verificação adicional após tudo carregar
-    window.addEventListener('load', function() {
-      // Verificações periódicas para garantir a visibilidade correta
-      const interval = setInterval(function() {
-        try {
-          const auth = JSON.parse(localStorage.getItem('auth') || '{}');
-          const adminPanel = document.getElementById('admin-panel');
-          const accessDenied = document.getElementById('access-denied');
-          const loginRequired = document.getElementById('login-required');
-          
-          if (auth && auth.user && auth.user.role === 'ADMIN') {
-            // Se usuário é admin mas o painel está oculto, corrigir
-            if (adminPanel && adminPanel.style.display !== 'block') {
-              console.log('Correção: Mostrando painel admin');
-              adminPanel.style.display = 'block';
-              if (accessDenied) accessDenied.style.display = 'none';
-              if (loginRequired) loginRequired.style.display = 'none';
-            }
-          }
-        } catch (e) {}  
-      }, 2000);
+      };
       
-      // Limpar o intervalo após 10 segundos
-      setTimeout(() => clearInterval(interval), 10000);
+      // Executar após um pequeno delay para garantir que o localStorage está disponível
+      setTimeout(performAuthCheck, 100);
     });
   </script>
+  
+  <!-- Admin script -->
+  <script type="module" src="./js/admin.js"></script>
 </body>
 </html>

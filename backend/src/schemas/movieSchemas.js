@@ -17,5 +17,5 @@ export const imageSchema = z.object({
   image: z
     .instanceof(File)
     .refine(file => file.type.startsWith('image/'), 'Formato inválido (use: JPG, PNG, etc.)')
-    .refine(file => file.size <= 5 * 1024 * 1024, 'Tamanho máximo: 5MB')
+    .refine(file => file.size <= 10 * 1024 * 1024, 'Tamanho máximo: 10MB')
 });

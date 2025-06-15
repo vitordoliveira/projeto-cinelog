@@ -1,4 +1,3 @@
-// js/auth.js
 import { showNotification, handleApiError } from './utils.js';
 
 // Configuração da API
@@ -268,19 +267,7 @@ export const authService = {
 
   async logout() {
     try {
-      // Tentar fazer logout no servidor
-      if (this.isAuthenticated()) {
-        await fetchWithAuth(`${API}/users/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.getAccessToken()}`,
-            'X-Refresh-Token': this.getRefreshToken(),
-            'X-Session-Id': authState.sessionId
-          }
-        });
-      }
-
-      // Limpar dados locais
+      // Apenas limpeza local, remove chamada ao backend
       localStorage.removeItem('auth');
       authState.accessToken = null;
       authState.refreshToken = null;
@@ -288,17 +275,13 @@ export const authService = {
       authState.deviceInfo = null;
       authState.currentUser = null;
       authState.isAuthenticated = false;
-      
+
       window.dispatchEvent(new Event('auth-state-changed'));
-      
       showNotification('Logout realizado com sucesso', 'success');
       this.updateAuthUI();
-      
-      // Redirecionar para login
       window.location.href = 'login.html';
     } catch (error) {
       console.error('[Logout Error]', error);
-      // Mesmo com erro, limpar dados locais
       this.clearAuthState();
       window.location.href = 'login.html';
     }
@@ -380,15 +363,21 @@ export const authService = {
   updateAuthUI() {
     const authStatus = this.isAuthenticated() ? 'Autenticado' : 'Não autenticado';
     console.log('[UI] Atualizando interface:', authStatus);
-    
+
+    // Esconde tudo por padrão, mostra só depois da checagem
+    document.querySelectorAll('[data-auth]').forEach(el => {
+      el.style.display = 'none';
+    });
+
     document.querySelectorAll('[data-auth]').forEach(el => {
       const authType = el.dataset.auth;
-      const shouldShow = 
-        (authType === 'authenticated' && this.isAuthenticated()) || 
-        (authType === 'unauthenticated' && !this.isAuthenticated()) ||
-        (authType === 'admin' && this.isAdmin());
-      
-      el.style.display = shouldShow ? '' : 'none';
+      let shouldShow = false;
+      if (authType === 'authenticated' && this.isAuthenticated()) shouldShow = true;
+      if (authType === 'unauthenticated' && !this.isAuthenticated()) shouldShow = true;
+      if (authType === 'admin' && this.isAdmin()) shouldShow = true;
+      if (shouldShow) {
+        el.style.display = '';
+      }
     });
 
     document.querySelectorAll('[data-user]').forEach(el => {

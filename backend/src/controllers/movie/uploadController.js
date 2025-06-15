@@ -27,13 +27,13 @@ export const uploadImageController = asyncHandler(async (req, res) => {
       });
     }
 
-    // Validação do tamanho do arquivo (5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    // Validação do tamanho do arquivo (10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
     if (image.size > maxSize) {
       console.log('❌ [Upload] Arquivo muito grande:', image.size);
       return res.status(400).json({ 
         error: "Arquivo muito grande",
-        message: "O tamanho máximo permitido é 5MB"
+        message: "O tamanho máximo permitido é 10MB"
       });
     }
 

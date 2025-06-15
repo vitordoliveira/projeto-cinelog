@@ -40,7 +40,7 @@ export const errorHandler = (error, req, res, next) => {
   
     // Erros do Cloudinary/Multer
     if (error.message.includes('File too large') || error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ message: 'Arquivo excede o tamanho máximo permitido (5MB)' });
+      return res.status(413).json({ message: 'Arquivo excede o tamanho máximo permitido (10MB)' });
     }
   
     // Erro genérico (fallback)

@@ -193,7 +193,6 @@ const movieService = {
             const newMovie = await response.json();
             console.log('[Create] Filme criado:', newMovie);
             
-            showNotification('Filme criado com sucesso!', 'success');
             setTimeout(() => window.location.href = 'index.html', 2000);
 
             return newMovie;
@@ -282,7 +281,6 @@ const movieService = {
             const updatedMovie = await response.json();
             console.log('[Update] Filme atualizado:', updatedMovie);
             
-            showNotification('Filme atualizado com sucesso!', 'success');
             return updatedMovie;
         } catch (error) {
             console.error('[Update Error]', error);
@@ -315,7 +313,6 @@ const movieService = {
             }
             
             console.log('[Delete] Filme excluído com sucesso');
-            showNotification('Filme excluído com sucesso!', 'success');
             return true;
         } catch (error) {
             console.error('[Delete Error]', error);
@@ -363,7 +360,6 @@ const movieService = {
                 throw new Error('URL da imagem não recebida');
             }
 
-            showNotification('Upload realizado com sucesso!', 'success');
             return data.url;
         } catch (error) {
             console.error('[Upload Error]', error);
@@ -465,20 +461,10 @@ const sessionService = {
             if (!authService.isAuthenticated()) {
                 throw new Error('Login necessário');
             }
-
-            const response = await fetch(`${API}/users/sessions`, {
-                headers: {
-                    'Authorization': `Bearer ${authService.getAccessToken()}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                }
-            });
-
+            const response = await fetchWithAuth(`${API}/users/sessions`);
             if (!response.ok) {
                 throw new Error('Erro ao carregar sessões');
             }
-
             return await response.json();
         } catch (error) {
             console.error('[Sessions Error]', error);
@@ -492,30 +478,21 @@ const sessionService = {
             if (!authService.isAuthenticated()) {
                 throw new Error('Login necessário');
             }
-
-            // Usando fetch diretamente com os headers mínimos necessários
-            const response = await fetch(`${API}/users/sessions/${sessionId}?_method=DELETE`, {
-                method: 'POST', // Mudando para POST para evitar problemas com o express-file-upload
+            const response = await fetchWithAuth(`${API}/users/sessions/${sessionId}`, {
+                method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${authService.getAccessToken()}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
+                    'Accept': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error('Erro ao encerrar sessão');
             }
-
             showNotification('Sessão encerrada com sucesso', 'success');
-            
             if (sessionId === authService.authState.sessionId) {
                 await authService.logout();
                 window.location.href = 'login.html';
                 return true;
             }
-
             return true;
         } catch (error) {
             console.error('[Terminate Session Error]', error);
@@ -529,30 +506,20 @@ const sessionService = {
             if (!authService.isAuthenticated()) {
                 throw new Error('Login necessário');
             }
-
-            // Usando fetch diretamente com os headers mínimos necessários
-            const response = await fetch(`${API}/users/sessions?_method=DELETE`, {
-                method: 'POST', // Mudando para POST para evitar problemas com o express-file-upload
+            const response = await fetchWithAuth(`${API}/users/sessions`, {
+                method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${authService.getAccessToken()}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
+                    'Accept': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error('Erro ao encerrar todas as sessões');
             }
-
             showNotification('Todas as sessões foram encerradas', 'success');
-            
-            // Adicionando um pequeno delay antes do logout
             setTimeout(async () => {
                 await authService.logout();
                 window.location.href = 'login.html';
             }, 1000);
-
             return true;
         } catch (error) {
             console.error('[Terminate All Sessions Error]', error);
