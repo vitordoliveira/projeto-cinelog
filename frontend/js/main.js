@@ -16,9 +16,9 @@ import {
 // Configurações da API
 const API = 'http://localhost:3000/api';
 
-// Configuração padrão para fetch
+// Configuração padrão para fetch - IMPORTANTE: credentials: 'include' para cookies
 const fetchConfig = {
-  credentials: 'include',
+  credentials: 'include', // Essencial para cookies HttpOnly
   mode: 'cors',
   headers: {
     'Content-Type': 'application/json',
@@ -26,28 +26,14 @@ const fetchConfig = {
   }
 };
 
-// Função helper para requisições autenticadas
+// Função helper para requisições autenticadas - SIMPLIFICADA
 const fetchWithAuth = async (url, options = {}) => {
   try {
-    const token = authService.getAccessToken();
-    const refreshToken = authService.getRefreshToken();
     const headers = {
       ...fetchConfig.headers,
       ...options.headers,
       'User-Agent': navigator.userAgent
     };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    if (refreshToken) {
-      headers['X-Refresh-Token'] = refreshToken;
-    }
-
-    if (authService.authState.sessionId) {
-      headers['X-Session-Id'] = authService.authState.sessionId;
-    }
 
     console.log(`[Fetch] ${options.method || 'GET'} ${url}`);
     if (options.body && !(options.body instanceof FormData)) {
@@ -55,7 +41,7 @@ const fetchWithAuth = async (url, options = {}) => {
     }
 
     const config = {
-      ...fetchConfig,
+      ...fetchConfig, // Já inclui credentials: 'include'
       ...options,
       headers
     };
@@ -65,28 +51,17 @@ const fetchWithAuth = async (url, options = {}) => {
       delete config.headers['Content-Type'];
     }
 
-    let response = await fetch(url, config);
+    const response = await fetch(url, config);
     
-    // Verificar se precisamos atualizar o access token
-    if (response.status === 401 && refreshToken) {
-      try {
-        console.log('[Fetch] Token expirado, tentando refresh...');
-        const newAccessToken = await authService.refreshTokens();
-        if (newAccessToken) {
-          config.headers['Authorization'] = `Bearer ${newAccessToken}`;
-          response = await fetch(url, config);
-        }
-      } catch (refreshError) {
-        console.error('[Refresh Token Error]', refreshError);
-        await authService.logout();
-        throw new Error('Sessão expirada - faça login novamente');
-      }
-    }
-
-    // Verificar header de novo access token
-    const newAccessToken = response.headers.get('X-New-Access-Token');
-    if (newAccessToken) {
-      authService.updateToken(newAccessToken);
+    // Verificar se recebeu erro 401 (não autorizado)
+    if (response.status === 401) {
+      console.warn('[Fetch] Sessão expirada ou inválida');
+      // Limpar estado de auth e redirecionar
+      authService.clearAuthState();
+      showNotification('Sessão expirada - faça login novamente', 'error');
+      localStorage.setItem('redirectTo', window.location.pathname);
+      window.location.href = 'login.html';
+      throw new Error('Sessão expirada');
     }
 
     if (!response.ok && response.status === 403) {
@@ -102,8 +77,8 @@ const fetchWithAuth = async (url, options = {}) => {
   } catch (error) {
     console.error('[Fetch Error]', error);
     if (error.message.includes('Sessão expirada')) {
-      showNotification(error.message, 'error');
-      window.location.href = 'login.html';
+      // Já tratado acima
+      return;
     }
     throw error;
   }
@@ -488,7 +463,7 @@ const sessionService = {
                 throw new Error('Erro ao encerrar sessão');
             }
             showNotification('Sessão encerrada com sucesso', 'success');
-            if (sessionId === authService.authState.sessionId) {
+            if (sessionId === authService.getSessionId()) { // ATUALIZADO
                 await authService.logout();
                 window.location.href = 'login.html';
                 return true;

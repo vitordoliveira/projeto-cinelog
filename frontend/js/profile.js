@@ -1,4 +1,3 @@
-// js/profile.js
 import { authService } from './auth.js';
 import { showNotification, handleApiError, formatDate, starRating } from './utils.js';
 import { initializeNavbar } from './components.js';
@@ -6,25 +5,39 @@ import { sessionService } from './main.js';
 
 const API = 'http://localhost:3000/api';
 
+// Função helper para requisições autenticadas (igual ao auth.js)
+const fetchWithAuth = async (url, options = {}) => {
+    const config = {
+        credentials: 'include', // Essencial para cookies HttpOnly
+        mode: 'cors',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': navigator.userAgent,
+            ...options.headers
+        },
+        ...options
+    };
+
+    // Para upload de arquivos, não incluir Content-Type
+    if (options.body instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
+    return fetch(url, config);
+};
+
 // Inicializa o serviço de perfil
 const profileService = {
     // Busca dados do usuário atual
     async fetchUserData() {
         try {
-            const token = authService.getAccessToken();
-            if (!token) {
+            if (!authService.isAuthenticated()) {
                 window.location.href = 'login.html';
                 return null;
             }
 
-            const response = await fetch(`${API}/users/me`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                }
-            });
+            const response = await fetchWithAuth(`${API}/users/me`);
 
             if (!response.ok) {
                 console.error('Erro ao buscar dados de usuário:', response.status);
@@ -51,8 +64,7 @@ const profileService = {
     // Atualiza perfil do usuário
     async updateProfile(userData) {
         try {
-            const token = authService.getAccessToken();
-            if (!token) {
+            if (!authService.isAuthenticated()) {
                 window.location.href = 'login.html';
                 return null;
             }
@@ -63,15 +75,8 @@ const profileService = {
                 return null;
             }
 
-            const response = await fetch(`${API}/users/${currentUser.id}`, {
+            const response = await fetchWithAuth(`${API}/users/${currentUser.id}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                },
                 body: JSON.stringify(userData)
             });
 
@@ -99,17 +104,9 @@ const profileService = {
     // Busca as avaliações feitas pelo usuário
     async fetchUserReviews() {
         try {
-            const token = authService.getAccessToken();
-            if (!token) return [];
+            if (!authService.isAuthenticated()) return [];
 
-            const response = await fetch(`${API}/users/me/reviews`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                }
-            });
+            const response = await fetchWithAuth(`${API}/users/me/reviews`);
 
             if (!response.ok) {
                 console.warn('Erro ao buscar avaliações:', response.status);
@@ -128,17 +125,9 @@ const profileService = {
     // Busca os filmes adicionados pelo usuário
     async fetchUserMovies() {
         try {
-            const token = authService.getAccessToken();
-            if (!token) return [];
+            if (!authService.isAuthenticated()) return [];
 
-            const response = await fetch(`${API}/users/me/movies`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                }
-            });
+            const response = await fetchWithAuth(`${API}/users/me/movies`);
 
             if (!response.ok) {
                 console.warn('Erro ao buscar filmes do usuário:', response.status);
@@ -160,8 +149,7 @@ const profileService = {
     // Upload de avatar
     async uploadAvatar(formData) {
         try {
-            const token = authService.getAccessToken();
-            if (!token) {
+            if (!authService.isAuthenticated()) {
                 window.location.href = 'login.html';
                 return null;
             }
@@ -172,15 +160,8 @@ const profileService = {
                 return null;
             }
 
-            const response = await fetch(`${API}/users/${currentUser.id}/avatar`, {
+            const response = await fetchWithAuth(`${API}/users/${currentUser.id}/avatar`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent
-                    // Removido o Content-Type para permitir que o navegador defina corretamente para multipart/form-data
-                },
                 body: formData
             });
 
@@ -213,8 +194,7 @@ const profileService = {
     // Método alternativo - gerar avatar baseado no nome
     async generateAvatar() {
         try {
-            const token = authService.getAccessToken();
-            if (!token) {
+            if (!authService.isAuthenticated()) {
                 window.location.href = 'login.html';
                 return null;
             }
@@ -225,15 +205,8 @@ const profileService = {
                 return null;
             }
 
-            const response = await fetch(`${API}/users/${currentUser.id}/avatar/generate`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-Refresh-Token': authService.getRefreshToken(),
-                    'X-Session-Id': authService.authState.sessionId,
-                    'User-Agent': navigator.userAgent,
-                    'Content-Type': 'application/json'
-                }
+            const response = await fetchWithAuth(`${API}/users/${currentUser.id}/avatar/generate`, {
+                method: 'POST'
             });
 
             if (!response.ok) {
@@ -270,7 +243,7 @@ const profileService = {
     // Funções de sessão
     async fetchUserSessions() {
         try {
-            return await sessionService.getSessions();
+            return await authService.getSessions();
         } catch (error) {
             console.error('Erro ao buscar sessões:', error);
             return [];
@@ -279,7 +252,7 @@ const profileService = {
 
     async terminateSession(sessionId) {
         try {
-            return await sessionService.terminateSession(sessionId);
+            return await authService.terminateSession(sessionId);
         } catch (error) {
             console.error('Erro ao encerrar sessão:', error);
             return false;
@@ -288,7 +261,7 @@ const profileService = {
 
     async terminateAllSessions() {
         try {
-            return await sessionService.terminateAllSessions();
+            return await authService.terminateAllSessions();
         } catch (error) {
             console.error('Erro ao encerrar todas as sessões:', error);
             return false;
@@ -375,7 +348,7 @@ function updateUserAvatar(userData) {
     }
 }
 
-// Função para renderizar as avaliações do usuário
+// Função para renderizar as avaliações do usuário (NOVA VERSÃO VERTICAL)
 function renderUserReviews(reviews) {
     const container = document.getElementById('user-reviews');
     const emptyState = document.getElementById('empty-reviews');
@@ -397,28 +370,29 @@ function renderUserReviews(reviews) {
     reviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     container.innerHTML = reviews.map(review => {
-        const movie = review.movie || { id: 0, title: 'Filme indisponível', imageUrl: '' };
+        const movie = review.movie || { id: 0, title: 'Filme indisponível', imageUrl: '', releaseYear: '' };
         
         return `
-            <div class="review-card">
-                <div class="review-movie">
-                    <img src="${movie.imageUrl || 'images/placeholder.jpg'}" alt="${movie.title}" class="review-movie-poster">
-                    <div class="review-movie-info">
-                        <h4 class="review-movie-title">${movie.title}</h4>
+            <div class="letterboxd-review-item">
+                <div class="review-poster-container" onclick="window.location.href='movie-detail.html?id=${movie.id}'">
+                    <img src="${movie.imageUrl || 'images/placeholder.jpg'}" 
+                         alt="${movie.title}" 
+                         class="review-poster">
+                </div>
+                
+                <div class="review-details">
+                    <div class="review-movie-header">
+                        <h3 class="review-movie-title" onclick="window.location.href='movie-detail.html?id=${movie.id}'">${movie.title}</h3>
+                        <span class="review-movie-year">${movie.releaseYear || ''}</span>
+                    </div>
+                    
+                    <div class="review-rating-line">
+                        <div class="review-stars">${starRating(review.rating)}</div>
                         <span class="review-date">Avaliado em ${formatDate(review.createdAt)}</span>
                     </div>
+                    
+                    ${review.comment ? `<div class="review-comment">${review.comment}</div>` : ''}
                 </div>
-                
-                <div class="review-content">
-                    <div class="review-rating">${starRating(review.rating)} ${Number(review.rating).toFixed(1)}</div>
-                    <div class="review-text">${review.comment || 'Sem comentários'}</div>
-                </div>
-                
-                ${movie.id ? `
-                <a href="movie-detail.html?id=${movie.id}" class="btn-primary movie-link" style="margin-top:10px">
-                    <i class="fas fa-eye"></i> Ver Filme
-                </a>
-                ` : ''}
             </div>
         `;
     }).join('');
@@ -565,9 +539,9 @@ function renderUserSessions(sessions) {
     // Adicionar o manipulador de eventos globalmente
     window.terminateSession = async (sessionId) => {
         if (confirm('Tem certeza que deseja encerrar esta sessão?')) {
-            const success = await sessionService.terminateSession(sessionId);
+            const success = await authService.terminateSession(sessionId);
             if (success) {
-                const sessions = await sessionService.getSessions();
+                const sessions = await authService.getSessions();
                 renderUserSessions(sessions);
             }
         }
@@ -677,7 +651,7 @@ function setupProfileButtons() {
                     
                     await authService.initialize();
                     
-                    populateProfileInfo(result.user || authService.getCurrentUser());
+                    populateProfileInfo(result.user || authService.authState.currentUser);
                 }
             } catch (error) {
                 console.error('Erro ao atualizar perfil:', error);
@@ -759,7 +733,7 @@ function setupSessionManagement() {
                 terminateAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Encerrando...';
                 
                 try {
-                    const success = await sessionService.terminateAllSessions();
+                    const success = await authService.terminateAllSessions();
                     if (success) {
                         showNotification('Encerrando todas as sessões...', 'info');
                     }
@@ -853,7 +827,6 @@ function clearAllNotifications() {
 
 // Função para dados mockados (enquanto o backend não está pronto)
 function mockUserMovies() {
-// ... continuação da função mockUserMovies
     return [
         {
             id: 1,

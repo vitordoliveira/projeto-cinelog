@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { logger } from './middlewares/logger.js';
 import userRouter from './routes/userRouter.js';
 import movieRouter from './routes/movieRouter.js';
@@ -15,7 +16,7 @@ const app = express();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500';
 const PORT = process.env.PORT || 3000;
 
-// Configuração CORS atualizada
+// Configuração CORS atualizada para cookies
 app.use(cors({
   origin: [FRONTEND_URL, 'http://127.0.0.1:5500'],
   credentials: true,
@@ -37,6 +38,9 @@ app.use(cors({
   ]
 }));
 
+// ADICIONADO: Cookie parser middleware
+app.use(cookieParser());
+
 // Aumentar limite do payload para suportar uploads
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -53,6 +57,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.log('Method:', req.method);
     console.log('Origin:', req.get('origin'));
     console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Cookies:', req.cookies); // ADICIONADO: Log de cookies
     if (req.body && Object.keys(req.body).length > 0) {
       console.log('Body:', JSON.stringify(req.body, null, 2));
     }
@@ -134,6 +139,7 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Frontend URL: ${FRONTEND_URL}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('Cookie support: ENABLED'); // ADICIONADO
   console.log('-----------------------------');
 });
 

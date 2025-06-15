@@ -1,63 +1,49 @@
-// js/utils.js
 import { authService } from './auth.js';
 
 // --- API Communication Utils ---
 // Configurações globais para a API
 const API_URL = 'http://localhost:3000';
 
-// Função para requisições autenticadas
+// Função para requisições autenticadas (usando cookies HttpOnly)
 export async function fetchWithAuth(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`;
   
-  // Prepara as opções da requisição com o token de autenticação
-  const token = authService.getAccessToken();
+  // Verificar se o usuário está autenticado
+  if (!authService.isAuthenticated()) {
+    throw new Error('Usuário não autenticado');
+  }
+  
+  // Prepara as opções da requisição com cookies
   const headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': navigator.userAgent,
     ...options.headers
   };
   
-  // Adiciona o token de Authorization se disponível
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Para upload de arquivos, não incluir Content-Type
+  if (options.body instanceof FormData) {
+    delete headers['Content-Type'];
   }
   
   // Configura a requisição com credentials e headers
   const fetchOptions = {
+    credentials: 'include', // Essencial para cookies HttpOnly
+    mode: 'cors',
     ...options,
-    headers,
-    credentials: 'include' // Importante para cookies
+    headers
   };
   
   try {
     // Faz a requisição
-    let response = await fetch(url, fetchOptions);
+    const response = await fetch(url, fetchOptions);
     
-    // Se a resposta indica token expirado (401)
+    // Se a resposta indica sessão expirada (401)
     if (response.status === 401) {
-      console.log("Token expirado ou inválido, tentando renovar...");
-      
-      // Tenta renovar o token
-      const tokenRefreshed = await authService.refreshToken();
-      
-      // Se o token foi renovado com sucesso, tenta a requisição novamente
-      if (tokenRefreshed) {
-        console.log("Token renovado com sucesso, repetindo requisição...");
-        // Atualiza o token na requisição
-        const newToken = authService.getAccessToken();
-        headers['Authorization'] = `Bearer ${newToken}`;
-        
-        // Refaz a requisição com o novo token
-        response = await fetch(url, {
-          ...fetchOptions,
-          headers
-        });
-      } else {
-        // Se não conseguiu renovar o token, o usuário precisa fazer login novamente
-        console.error("Não foi possível renovar o token. Redirecionando para login...");
-        authService.logout();
-        window.location.href = '/login.html';
-        throw new Error("Sessão expirada. Por favor, faça login novamente.");
-      }
+      console.log("Sessão expirada, redirecionando para login...");
+      authService.clearAuthState();
+      window.location.href = '/login.html';
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
     }
     
     return response;

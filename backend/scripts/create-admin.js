@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function createAdmin() {
   try {
     // Substitua por um email de um usuário existente em seu sistema
-    const emailDoUsuario = 'vitinzor2@gmail.com';  // Altere para o email correto
+    const emailDoUsuario = 'vitinzor@gmail.com';  // Altere para o email correto
 
     // Verificar se o usuário existe
     const user = await prisma.user.findUnique({

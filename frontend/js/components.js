@@ -34,6 +34,8 @@ export function initializeNavbar() {
   document.querySelectorAll('header.navbar').forEach((el, i) => { if(i > 0) el.remove(); });
   if (document.querySelector('header.navbar')) return;
 
+  console.log('[Navbar] Inicializando navbar...');
+
   const path = window.location.pathname;
   let currentPage = 'home';
 
@@ -68,13 +70,35 @@ export function initializeNavbar() {
     });
   }
 
-  // Só mostra as abas corretas após auth inicializar de fato
+  // AGUARDAR authService estar disponível e inicializado
   import('./auth.js').then(module => {
-    // Atualiza UI só depois do evento auth-initialized
-    const runUiUpdate = () => module.authService.updateAuthUI();
-    // Força update APÓS navbar estar inserida
-    setTimeout(runUiUpdate, 0);
-    window.addEventListener('auth-initialized', runUiUpdate);
-    window.addEventListener('auth-state-changed', runUiUpdate);
+    const authService = module.authService;
+    
+    // Função para atualizar UI da navbar
+    const updateNavbarUI = () => {
+      console.log('[Navbar] Atualizando UI da navbar');
+      console.log('[Navbar] Estado auth:', {
+        isAuthenticated: authService.isAuthenticated(),
+        isAdmin: authService.isAdmin(),
+        user: authService.authState.currentUser
+      });
+      
+      // Forçar atualização da UI
+      authService.updateAuthUI();
+    };
+
+    // Aguardar inicialização completa
+    if (authService.authState.isAuthenticated !== undefined) {
+      // Já inicializado
+      setTimeout(updateNavbarUI, 100);
+    } else {
+      // Aguardar eventos de inicialização
+      window.addEventListener('auth-initialized', updateNavbarUI);
+    }
+    
+    // Sempre escutar mudanças de estado
+    window.addEventListener('auth-state-changed', updateNavbarUI);
   });
+
+  console.log('[Navbar] ✅ Navbar inicializada');
 }

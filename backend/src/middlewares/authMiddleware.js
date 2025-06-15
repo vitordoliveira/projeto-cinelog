@@ -40,32 +40,45 @@ const validateSession = async (sessionId, userId, deviceInfo) => {
 };
 
 export const auth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
   const deviceInfo = req.headers['user-agent'] || 'unknown';
   const ipAddress = req.ip || req.connection.remoteAddress;
   
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Token não fornecido' });
+  // NOVA LÓGICA: Tentar cookies primeiro, depois headers (compatibilidade)
+  let accessToken = req.cookies?.accessToken; // Cookies HttpOnly
+  let refreshToken = req.cookies?.refreshToken;
+  
+  // Fallback para headers (compatibilidade durante transição)
+  if (!accessToken) {
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      accessToken = authHeader.split(' ')[1];
+    }
+  }
+  
+  if (!refreshToken) {
+    refreshToken = req.headers['x-refresh-token'];
+  }
+  
+  // Se não tem nem cookie nem header, não autorizado
+  if (!accessToken && !refreshToken) {
+    return res.status(401).json({ 
+      error: 'Token não fornecido',
+      code: 'NO_TOKEN'
+    });
   }
 
   try {
-    // Extrair access token
-    const accessToken = authHeader.split(' ')[1];
+    let decoded = null;
     
-    // Verificar access token
-    const decoded = await verifyToken(accessToken, process.env.JWT_SECRET);
+    // Verificar access token se existir
+    if (accessToken) {
+      decoded = await verifyToken(accessToken, process.env.JWT_SECRET);
+    }
     
-    if (!decoded) {
-      // Se o access token for inválido, verificar o refresh token
-      const refreshToken = req.headers['x-refresh-token'];
+    if (!decoded && refreshToken) {
+      // Access token inválido/expirado, tentar refresh token
+      console.log('🔄 Access token inválido, tentando refresh token...');
       
-      if (!refreshToken) {
-        return res.status(401).json({ 
-          error: 'Sessão expirada',
-          code: 'TOKEN_EXPIRED'
-        });
-      }
-
       // Verificar refresh token no banco
       const storedRefreshToken = await prisma.refreshToken.findFirst({
         where: {
@@ -82,7 +95,9 @@ export const auth = async (req, res, next) => {
               name: true,
               email: true,
               role: true,
-              isActive: true
+              isActive: true,
+              avatarUrl: true,
+              createdAt: true
             }
           },
           session: true
@@ -90,6 +105,11 @@ export const auth = async (req, res, next) => {
       });
 
       if (!storedRefreshToken || !storedRefreshToken.user.isActive) {
+        // Limpar cookies inválidos
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        res.clearCookie('sessionId');
+        
         return res.status(401).json({ 
           error: 'Refresh token inválido',
           code: 'INVALID_REFRESH_TOKEN'
@@ -110,6 +130,11 @@ export const auth = async (req, res, next) => {
           data: { isRevoked: true }
         });
 
+        // Limpar cookies inválidos
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        res.clearCookie('sessionId');
+
         return res.status(401).json({ 
           error: 'Sessão inválida',
           code: 'INVALID_SESSION'
@@ -126,13 +151,26 @@ export const auth = async (req, res, next) => {
         { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' }
       );
 
-      // Incluir novo access token na resposta
+      // DEFINIR NOVO ACCESS TOKEN EM COOKIE
+      const isProduction = process.env.NODE_ENV === 'production';
+      res.cookie('accessToken', newAccessToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+        maxAge: 15 * 60 * 1000, // 15 minutos
+        path: '/'
+      });
+
+      // Também incluir no header para compatibilidade
       res.setHeader('X-New-Access-Token', newAccessToken);
       
       req.user = storedRefreshToken.user;
       req.sessionId = storedRefreshToken.sessionId;
-    } else {
-      // Se o access token for válido, verificar se a sessão ainda está ativa
+
+      console.log(`✅ Token renovado para usuário ${storedRefreshToken.user.id}`);
+      
+    } else if (decoded) {
+      // Access token válido
       const sessionValid = await validateSession(
         decoded.sessionId,
         decoded.userId,
@@ -140,6 +178,11 @@ export const auth = async (req, res, next) => {
       );
 
       if (!sessionValid) {
+        // Limpar cookies inválidos
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        res.clearCookie('sessionId');
+        
         return res.status(401).json({ 
           error: 'Sessão inválida',
           code: 'INVALID_SESSION'
@@ -154,11 +197,18 @@ export const auth = async (req, res, next) => {
           name: true, 
           email: true, 
           role: true,
-          isActive: true
+          isActive: true,
+          avatarUrl: true,
+          createdAt: true
         }
       });
 
       if (!user || !user.isActive) {
+        // Limpar cookies para usuário inválido
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        res.clearCookie('sessionId');
+        
         return res.status(401).json({ 
           error: 'Usuário não encontrado ou inativo',
           code: 'USER_NOT_FOUND'
@@ -167,6 +217,16 @@ export const auth = async (req, res, next) => {
 
       req.user = user;
       req.sessionId = decoded.sessionId;
+    } else {
+      // Nem access token nem refresh token válidos
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('sessionId');
+      
+      return res.status(401).json({ 
+        error: 'Tokens inválidos',
+        code: 'INVALID_TOKENS'
+      });
     }
 
     // Atualizar último acesso da sessão
@@ -174,13 +234,18 @@ export const auth = async (req, res, next) => {
       where: { id: req.sessionId },
       data: { 
         lastActivity: new Date(),
-        ipAddress: ipAddress // Atualiza o IP em cada requisição
+        ipAddress: ipAddress
       }
     });
 
     next();
   } catch (err) {
-    console.error('Auth Middleware Error:', err);
+    console.error('❌ Auth Middleware Error:', err);
+    
+    // Limpar cookies em caso de erro
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    res.clearCookie('sessionId');
     
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ 

@@ -7,58 +7,116 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body class="dark-bg">
-    <!-- Notification Container -->
+<body class="dark-bg" data-skip-auth-init="true">
     <div id="notification-container"></div>
 
     <!-- A navbar será injetada aqui pelo JavaScript -->
 
     <main>
-        <form id="add-movie-form" class="form">
-            <h2>Adicionar Novo Filme</h2>
-            
-            <div class="form-group">
-                <label for="title">Título:</label>
-                <input type="text" id="title" name="title" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="director">Diretor:</label>
-                <input type="text" id="director" name="director" placeholder="Ex: Christopher Nolan">
-            </div>
-            
-            <div class="form-group">
-                <label for="genre">Gênero:</label>
-                <input type="text" id="genre" name="genre" placeholder="Ex: Ação, Drama, Comédia">
-            </div>
-            
-            <div class="form-group">
-                <label for="description">Descrição:</label>
-                <textarea id="description" name="description" rows="6" required></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label for="releaseYear">Ano de Lançamento:</label>
-                <input type="number" id="releaseYear" name="releaseYear" required min="1888">
-            </div>
-            
-            <div class="form-group">
-                <label for="image">Imagem (Upload):</label>
-                <input type="file" id="image" name="image" accept="image/*">
-            </div>
-
-            <button type="submit">Salvar Filme</button>
-        </form>
+        <div class="form-container">
+            <form id="add-movie-form" class="form" method="post">
+                <h2>Adicionar Novo Filme</h2>
+                
+                <div class="form-layout">
+                    <div class="form-column-left">
+                        <div class="form-group">
+                            <label for="title">Título:</label>
+                            <input type="text" id="title" name="title" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="director">Diretor:</label>
+                            <input type="text" id="director" name="director" placeholder="Ex: Christopher Nolan">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="genre">Gênero:</label>
+                            <input type="text" id="genre" name="genre" placeholder="Ex: Ação, Drama, Comédia">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="description">Descrição:</label>
+                            <textarea id="description" name="description" rows="10" required></textarea>
+                            <div id="char-counter" class="char-counter">0 caracteres</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="releaseYear">Ano de Lançamento:</label>
+                            <input type="number" id="releaseYear" name="releaseYear" required min="1888" max="2099">
+                        </div>
+                    </div>
+                    
+                    <div class="form-column-right">
+                        <div class="form-group">
+                            <label for="image">Imagem (Upload):</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="image" name="image" accept="image/*">
+                                <span class="file-input-button">Escolher arquivo</span>
+                            </div>
+                            <div id="file-name" class="file-name-display">Nenhum arquivo selecionado</div>
+                        </div>
+                        
+                        <div id="preview-container" class="image-preview-container hidden">
+                            <p>Preview da imagem:</p>
+                            <img id="image-preview" alt="Preview da imagem">
+                            <button type="button" id="clear-image" class="btn-secondary">Remover imagem</button>
+                            <p id="image-size" class="file-info"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <a href="index.html" class="btn-back"><i class="fas fa-arrow-left"></i> Voltar</a>
+                    <button type="submit">Adicionar Filme</button>
+                </div>
+            </form>
+        </div>
     </main>
 
-    <!-- Scripts -->
-    <script type="module" src="./js/utils.js"></script>
-    <script type="module" src="./js/main.js"></script>
-    <script type="module" src="./js/auth.js"></script>
-    <script type="module" src="./js/add.js"></script>
     <script type="module">
-        import { initializeNavbar } from './js/components.js';
-        document.addEventListener('DOMContentLoaded', initializeNavbar);
+        const initializePage = async () => {
+            try {
+                console.log('[Add HTML] 🚀 Iniciando inicialização...');
+                
+                // Carregar módulos principais
+                const [utils, main, auth, components] = await Promise.all([
+                    import('./js/utils.js'),
+                    import('./js/main.js'),
+                    import('./js/auth.js'),
+                    import('./js/components.js')
+                ]);
+                
+                // Inicializar notification container
+                if (!document.getElementById('notification-container')) {
+                    const nc = document.createElement('div');
+                    nc.id = 'notification-container';
+                    document.body.prepend(nc);
+                }
+                
+                // Inicializar AUTH
+                await auth.authService.initialize();
+                
+                // Inicializar navbar
+                await components.initializeNavbar();
+                
+                // Carregar e executar add.js
+                const addModule = await import('./js/add.js');
+                if (typeof addModule.initAddMoviePage === 'function') {
+                    await addModule.initAddMoviePage();
+                }
+                
+                console.log('[Add HTML] ✅ Inicialização completa!');
+                
+            } catch (error) {
+                console.error('[Add HTML] ❌ Erro na inicialização:', error);
+            }
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
     </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import createUserController from '../controllers/user/createUserController.js';
 import loginUserController from '../controllers/user/loginUserController.js';
+import logoutController from '../controllers/user/logoutController.js'; // ADICIONADO
 import getAllUsersController from '../controllers/user/getAllUsersController.js';
 import getUserController from '../controllers/user/getUserController.js';
 import updateUserController from '../controllers/user/updateUserController.js';
@@ -40,6 +41,13 @@ router.post(
   '/login',
   validate(loginSchema),
   asyncHandler(loginUserController)
+);
+
+// ADICIONADO: Rota de logout
+router.post(
+  '/logout',
+  auth,
+  asyncHandler(logoutController)
 );
 
 // Rotas de sessão

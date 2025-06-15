@@ -1,4 +1,3 @@
-// js/admin.js
 import { authService } from './auth.js';
 import { showNotification } from './utils.js';
 
@@ -8,45 +7,36 @@ const API_URL = 'http://localhost:3000/api';
 let initialized = false;
 let initializationInProgress = false;
 
-// Helper para requisições autenticadas
+// Helper para requisições autenticadas (usando cookies)
 async function fetchWithAuth(url, options = {}) {
-  const token = authService.getAccessToken();
-  const refreshToken = authService.getRefreshToken();
-  const sessionId = authService.authState.sessionId;
-
-  if (!token) {
-    throw new Error('Token de autenticação não encontrado');
+  if (!authService.isAuthenticated()) {
+    throw new Error('Usuário não autenticado');
   }
 
-  const headers = {
-    ...options.headers,
-    'Authorization': `Bearer ${token}`,
-    'X-Refresh-Token': refreshToken,
-    'X-Session-Id': sessionId,
-    'User-Agent': navigator.userAgent
+  const config = {
+    credentials: 'include', // Essencial para cookies HttpOnly
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': navigator.userAgent,
+      ...options.headers
+    },
+    ...options
   };
 
-  if (options.body && !(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+  // Para upload de arquivos, não incluir Content-Type
+  if (options.body instanceof FormData) {
+    delete config.headers['Content-Type'];
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
+  const response = await fetch(url, config);
 
-  if (response.status === 401 && refreshToken) {
-    try {
-      const newToken = await authService.refreshTokens();
-      if (newToken) {
-        headers['Authorization'] = `Bearer ${newToken}`;
-        return fetch(url, { ...options, headers });
-      }
-    } catch (error) {
-      console.error('Erro ao renovar token:', error);
-      await authService.logout();
-      throw new Error('Sessão expirada - faça login novamente');
-    }
+  if (response.status === 401) {
+    console.warn('Sessão expirada no admin');
+    authService.clearAuthState();
+    window.location.href = 'login.html';
+    throw new Error('Sessão expirada - faça login novamente');
   }
 
   return response;
@@ -75,16 +65,8 @@ function init() {
   accessDenied.style.display = 'none';
   loginRequired.style.display = 'none';
   
-  // Verificar se temos informações no localStorage primeiro
-  let authData;
-  try {
-    authData = JSON.parse(localStorage.getItem('auth') || '{}');
-  } catch (e) {
-    authData = {};
-  }
-  
-  // Se não tem dados no localStorage, redirecionar para login
-  if (!authData.accessToken) {
+  // Verificar autenticação usando o authService (cookies)
+  if (!authService.isAuthenticated()) {
     console.log('Não autenticado - redirecionando');
     loginRequired.style.display = 'block';
     localStorage.setItem('redirectTo', 'admin.html');
@@ -95,22 +77,12 @@ function init() {
     return;
   }
   
-  // Se não é admin no localStorage, mostrar acesso negado
-  if (!authData.user || authData.user.role !== 'ADMIN') {
+  // Verificar se é admin
+  if (!authService.isAdmin()) {
     console.log('Não é admin - acesso negado');
     accessDenied.style.display = 'block';
     initializationInProgress = false;
     return;
-  }
-  
-  // Verificar também no authService se estiver disponível
-  if (authService.authState.currentUser) {
-    if (!authService.isAdmin()) {
-      console.log('AuthService confirma: não é admin');
-      accessDenied.style.display = 'block';
-      initializationInProgress = false;
-      return;
-    }
   }
   
   // É admin, mostrar painel
@@ -138,25 +110,18 @@ function performSingleAuthCheck() {
   
   // Aguardar um momento para garantir que não há outras verificações rodando
   setTimeout(() => {
-    let authData;
-    try {
-      authData = JSON.parse(localStorage.getItem('auth') || '{}');
-    } catch (e) {
-      authData = {};
-    }
-    
     console.log('Dados de autenticação:', {
-      hasToken: !!authData.accessToken,
-      hasUser: !!authData.user,
-      userRole: authData.user?.role
+      isAuthenticated: authService.isAuthenticated(),
+      isAdmin: authService.isAdmin(),
+      user: authService.authState.currentUser
     });
     
-    if (!authData.accessToken) {
+    if (!authService.isAuthenticated()) {
       console.log('RESULTADO: Login necessário');
       if (loginRequired) loginRequired.style.display = 'block';
       localStorage.setItem('redirectTo', 'admin.html');
       setTimeout(() => window.location.href = 'login.html', 1500);
-    } else if (!authData.user || authData.user.role !== 'ADMIN') {
+    } else if (!authService.isAdmin()) {
       console.log('RESULTADO: Acesso negado');
       if (accessDenied) accessDenied.style.display = 'block';
     } else {
@@ -227,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 200);
 });
 
-// Resto das funções permanecem iguais...
+// Resto das funções atualizadas para usar cookies...
 async function loadUsers() {
   try {
     console.log('Carregando usuários...');
@@ -334,7 +299,7 @@ async function loadUsers() {
   }
 }
 
-// Manter todas as outras funções como estavam...
+// Manter todas as outras funções como estavam mas atualizando fetchWithAuth...
 function renderUsersTable(users) {
   const tableBody = document.querySelector('#users-table tbody');
   
@@ -402,17 +367,12 @@ function renderUsersTable(users) {
   }
 }
 
-// Todas as outras funções permanecem iguais (loadReviews, loadMovies, etc.)
+// Todas as outras funções atualizadas para usar fetchWithAuth com cookies
 async function loadReviews() {
   try {
     console.log('Carregando avaliações...');
-    const token = authService.getAccessToken();
     
-    const response = await fetch(`${API_URL}/reviews/admin/stats`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const response = await fetchWithAuth(`${API_URL}/reviews/admin/stats`);
     
     if (!response.ok) {
       throw new Error(`Erro ao carregar estatísticas: ${response.status} ${response.statusText}`);
@@ -424,11 +384,7 @@ async function loadReviews() {
     renderReviewStats(stats);
     
     // Carregar lista de avaliações
-    const reviewsResponse = await fetch(`${API_URL}/reviews/admin/list`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const reviewsResponse = await fetchWithAuth(`${API_URL}/reviews/admin/list`);
     
     if (!reviewsResponse.ok) {
       throw new Error(`Erro ao carregar lista: ${reviewsResponse.status} ${reviewsResponse.statusText}`);
@@ -587,14 +543,9 @@ function renderReviewsTable(reviews) {
 async function loadMovies() {
   try {
     console.log('Carregando filmes...');
-    const token = authService.getAccessToken();
     
     // Carregar estatísticas
-    const statsResponse = await fetch(`${API_URL}/movies/admin/stats`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const statsResponse = await fetchWithAuth(`${API_URL}/movies/admin/stats`);
     
     if (!statsResponse.ok) {
       throw new Error(`Erro ao carregar estatísticas: ${statsResponse.status}`);
@@ -603,11 +554,7 @@ async function loadMovies() {
     const stats = await statsResponse.json();
     
     // Carregar lista de filmes
-    const listResponse = await fetch(`${API_URL}/movies/admin/list`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const listResponse = await fetchWithAuth(`${API_URL}/movies/admin/list`);
     
     if (!listResponse.ok) {
       throw new Error(`Erro ao carregar lista: ${listResponse.status}`);
@@ -710,17 +657,12 @@ function editMovie(id) {
 
 async function deleteMovie(id) {
   try {
-    const token = authService.getAccessToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
+    if (!authService.isAuthenticated()) {
+      throw new Error('Usuário não autenticado');
     }
     
     // Obter informações do filme
-    const movieResponse = await fetch(`${API_URL}/movies/${id}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const movieResponse = await fetchWithAuth(`${API_URL}/movies/${id}`);
     
     if (!movieResponse.ok) {
       throw new Error(`Erro ao obter detalhes: ${movieResponse.status}`);
@@ -730,11 +672,8 @@ async function deleteMovie(id) {
     const movieTitle = movie.title || `ID ${id}`;
     
     if (confirm(`Tem certeza que deseja excluir o filme "${movieTitle}"? Esta ação não pode ser desfeita.`)) {
-      const response = await fetch(`${API_URL}/movies/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetchWithAuth(`${API_URL}/movies/${id}`, {
+        method: 'DELETE'
       });
       
       if (!response.ok) {
@@ -780,11 +719,8 @@ function confirmDeleteReview(reviewId, movieTitle) {
 
 async function deleteReview(reviewId) {
   try {
-    const response = await fetch(`${API_URL}/reviews/admin/${reviewId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${authService.getAccessToken()}`
-      }
+    const response = await fetchWithAuth(`${API_URL}/reviews/admin/${reviewId}`, {
+      method: 'DELETE'
     });
     
     if (!response.ok) {
@@ -805,11 +741,8 @@ async function deleteReview(reviewId) {
 async function promoteUser(userId, userName) {
   if (confirm(`Tem certeza que deseja promover ${userName} para ADMINISTRADOR?`)) {
     try {
-      const response = await fetch(`${API_URL}/users/admin/users/${userId}/promote`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${authService.getAccessToken()}`
-        }
+      const response = await fetchWithAuth(`${API_URL}/users/admin/users/${userId}/promote`, {
+        method: 'PUT'
       });
       
       if (!response.ok) {
@@ -837,11 +770,8 @@ async function promoteUser(userId, userName) {
 async function demoteUser(userId, userName) {
   if (confirm(`Tem certeza que deseja rebaixar ${userName} para usuário comum?`)) {
     try {
-      const response = await fetch(`${API_URL}/users/admin/users/${userId}/demote`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${authService.getAccessToken()}`
-        }
+      const response = await fetchWithAuth(`${API_URL}/users/admin/users/${userId}/demote`, {
+        method: 'PUT'
       });
       
       if (!response.ok) {
@@ -874,11 +804,8 @@ function confirmDeleteUser(userId, userName) {
 
 async function deleteUser(userId, userName) {
   try {
-    const response = await fetch(`${API_URL}/users/admin/users/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${authService.getAccessToken()}`
-      }
+    const response = await fetchWithAuth(`${API_URL}/users/admin/users/${userId}`, {
+      method: 'DELETE'
     });
     
     if (!response.ok) {

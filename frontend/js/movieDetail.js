@@ -1,4 +1,4 @@
-// js/movieDetail.js - Versão completa e atualizada
+// js/movieDetail.js - Versão completa e atualizada com cookies HttpOnly
 
 import { authService } from './auth.js';
 import { showNotification, starRating, formatDate, handleApiError } from './utils.js';
@@ -10,8 +10,30 @@ const config = {
     endpoints: {
         movie: '/movies',
         reviews: '/reviews',
-        users: '/users' // Adicionado endpoint para usuários
+        users: '/users'
     }
+};
+
+// Helper para requisições autenticadas (usando cookies)
+const fetchWithAuth = async (url, options = {}) => {
+    const config = {
+        credentials: 'include', // Essencial para cookies HttpOnly
+        mode: 'cors',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': navigator.userAgent,
+            ...options.headers
+        },
+        ...options
+    };
+
+    // Para upload de arquivos, não incluir Content-Type
+    if (options.body instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
+    return fetch(url, config);
 };
 
 // Elementos DOM
@@ -727,8 +749,6 @@ const handleReviewSubmit = async (event) => {
     }
     
     try {
-        const token = authService.getAccessToken();
-        
         // Constrói o payload de forma diferente
         const payload = { 
             rating: Number(rating)
@@ -739,12 +759,8 @@ const handleReviewSubmit = async (event) => {
             payload.comment = comment;
         }
         
-        const response = await fetch(`${config.baseUrl}${config.endpoints.movie}/${movieId}${config.endpoints.reviews}`, {
+        const response = await fetchWithAuth(`${config.baseUrl}${config.endpoints.movie}/${movieId}${config.endpoints.reviews}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify(payload)
         });
         
@@ -775,8 +791,7 @@ const handleReviewSubmit = async (event) => {
 // Exclui uma avaliação (como usuário normal)
 const deleteReview = async (reviewId) => {
     try {
-        const token = authService.getAccessToken();
-        if (!token) {
+        if (!authService.isAuthenticated()) {
             showNotification('Você precisa estar logado para excluir avaliações.', 'error');
             return false;
         }
@@ -790,13 +805,9 @@ const deleteReview = async (reviewId) => {
             return false;
         }
         
-        // Enviar ID como parte do body
-        const response = await fetch(`${config.baseUrl}${config.endpoints.movie}/${movieId}${config.endpoints.reviews}/${numericReviewId}`, {
+        // Enviar ID como parte do body usando fetchWithAuth
+        const response = await fetchWithAuth(`${config.baseUrl}${config.endpoints.movie}/${movieId}${config.endpoints.reviews}/${numericReviewId}`, {
             method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify({ id: numericReviewId })
         });
         
@@ -823,8 +834,7 @@ const deleteReview = async (reviewId) => {
 // Versão alternativa da função caso a primeira não funcione
 const deleteReviewAsAdmin = async (reviewId) => {
     try {
-        const token = authService.getAccessToken();
-        if (!token) {
+        if (!authService.isAuthenticated()) {
             showNotification('Você precisa estar logado para excluir avaliações.', 'error');
             return false;
         }
@@ -848,11 +858,8 @@ const deleteReviewAsAdmin = async (reviewId) => {
         const url = `${config.baseUrl}/users/admin/reviews/${numericReviewId}`;
         console.log('URL da exclusão de administrador (alternativa):', url);
         
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        const response = await fetchWithAuth(url, {
+            method: 'DELETE'
         });
         
         if (!response.ok) {

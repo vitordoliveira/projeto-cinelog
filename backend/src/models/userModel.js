@@ -1,4 +1,3 @@
-// models/userModel.js
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
@@ -13,9 +12,9 @@ export async function getUserById(id) {
       id: true,
       name: true,
       email: true,
-      avatarUrl: true,  // Adicionamos este campo para retornar a URL do avatar
-      createdAt: true,  // Útil para mostrar "membro desde"
-      // você pode incluir mais campos se quiser retornar no /me
+      role: true,      // ← ADICIONAR ESTE CAMPO!
+      avatarUrl: true,
+      createdAt: true,
     },
   });
 }
@@ -32,8 +31,12 @@ export async function getAllUsers() {
       id: true,
       name: true,
       email: true,
-      avatarUrl: true,  // Incluir avatar também na listagem de usuários
-      // adicione mais campos se desejar
+      role: true,      // ← ADICIONAR AQUI TAMBÉM!
+      avatarUrl: true,
+      _count: {        // ← ÚTIL PARA ADMIN
+        reviews: true,
+        addedMovies: true
+      }
     },
   });
 }

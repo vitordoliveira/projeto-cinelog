@@ -1,4 +1,3 @@
-// js/add.js
 import { movieService } from './main.js';
 import { showNotification } from './utils.js';
 import { authService } from './auth.js';
@@ -68,7 +67,66 @@ const compressImage = (file) => {
     });
 };
 
-// Função para preview da imagem
+// Função para configurar textareas (novo - do padrão moderno)
+const setupTextareas = () => {
+    const allTextareas = document.querySelectorAll('textarea');
+    allTextareas.forEach(textarea => {
+        textarea.style.resize = 'none';
+        
+        // Prevenir redimensionamento
+        textarea.addEventListener('mousedown', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (x > rect.width - 20 && y > rect.height - 20) {
+                e.preventDefault();
+            }
+        });
+    });
+};
+
+// Função para configurar contador de caracteres (novo - do padrão moderno)
+const setupCharCounter = () => {
+    const description = document.getElementById('description');
+    const charCounter = document.getElementById('char-counter');
+    
+    if (description && charCounter) {
+        const updateCounter = () => {
+            const currentLength = description.value.length;
+            charCounter.textContent = `${currentLength} caracteres`;
+            
+            if (currentLength > 2000) {
+                charCounter.className = 'char-counter danger';
+            } else if (currentLength > 1500) {
+                charCounter.className = 'char-counter warning';
+            } else {
+                charCounter.className = 'char-counter';
+            }
+        };
+        
+        description.addEventListener('input', updateCounter);
+        updateCounter(); // Inicializar
+    }
+};
+
+// Função para configurar file input moderno (novo - do padrão moderno)
+const setupFileInput = () => {
+    const fileInput = document.getElementById('image');
+    const fileNameDisplay = document.getElementById('file-name');
+    
+    if (fileInput && fileNameDisplay) {
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                fileNameDisplay.textContent = this.files[0].name;
+            } else {
+                fileNameDisplay.textContent = 'Nenhum arquivo selecionado';
+            }
+        });
+    }
+};
+
+// Função para preview da imagem (atualizada para novo layout)
 const setupImagePreview = () => {
     const imageInput = document.getElementById('image');
     const imagePreview = document.getElementById('image-preview');
@@ -135,6 +193,13 @@ const setupImagePreview = () => {
             imageInput.value = '';
             imagePreview.src = '';
             previewContainer?.classList.add('hidden');
+            
+            // Resetar file name display também
+            const fileNameDisplay = document.getElementById('file-name');
+            if (fileNameDisplay) {
+                fileNameDisplay.textContent = 'Nenhum arquivo selecionado';
+            }
+            
             if (imageSize) {
                 imageSize.textContent = '';
             }
@@ -146,7 +211,20 @@ const setupImagePreview = () => {
 const initAddMoviePage = async () => {
     console.log('[Add] Inicializando página de adição de filme...');
 
-    // Verificar autenticação
+    // AGUARDAR inicialização do authService
+    await new Promise(resolve => {
+        if (authService.authState.isAuthenticated !== undefined) {
+            resolve();
+        } else {
+            const handler = () => {
+                window.removeEventListener('auth-initialized', handler);
+                resolve();
+            };
+            window.addEventListener('auth-initialized', handler);
+        }
+    });
+
+    // Verificar autenticação APÓS inicialização
     if (!authService.isAuthenticated()) {
         console.log('[Add] Usuário não autenticado, redirecionando...');
         showNotification('Login necessário para adicionar filmes', 'error');
@@ -155,13 +233,18 @@ const initAddMoviePage = async () => {
         return;
     }
 
+    console.log('[Add] ✅ Usuário autenticado, prosseguindo...');
+
     const form = document.getElementById('add-movie-form');
     if (!form) {
         console.error('[Add] Formulário não encontrado');
         return;
     }
 
-    // Configurar preview de imagem
+    // ✨ CONFIGURAÇÕES MODERNAS
+    setupTextareas();
+    setupCharCounter();
+    setupFileInput();
     setupImagePreview();
 
     // Configurar data máxima como ano atual
@@ -169,18 +252,20 @@ const initAddMoviePage = async () => {
     const yearInput = document.getElementById('releaseYear');
     if (yearInput) {
         yearInput.max = currentYear + 1; // Permite filmes do próximo ano
-        yearInput.value = currentYear; // Ano atual como padrão
+        // Não definir valor padrão para deixar campo vazio
     }
 
     // Handler do formulário
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         
+        console.log('[Add] 🎬 Formulário submetido!');
+        
         // Desabilitar o botão de submit
         const submitButton = form.querySelector('button[type="submit"]');
         if (submitButton) {
             submitButton.disabled = true;
-            submitButton.textContent = 'Processando...';
+            submitButton.textContent = 'Adicionando...';
         }
         
         try {
@@ -199,7 +284,7 @@ const initAddMoviePage = async () => {
                 imageFile: form.image.files[0]
             };
 
-            console.log('[Add] Dados do formulário:', {
+            console.log('[Add] 📋 Dados coletados:', {
                 ...formData,
                 imageFile: formData.imageFile ? {
                     name: formData.imageFile.name,
@@ -208,7 +293,7 @@ const initAddMoviePage = async () => {
                 } : null
             });
 
-            // Validações
+            // Validações aprimoradas
             if (!formData.title) {
                 throw new Error('O título é obrigatório');
             }
@@ -218,32 +303,47 @@ const initAddMoviePage = async () => {
             if (isNaN(formData.releaseYear) || formData.releaseYear < 1888) {
                 throw new Error('Ano de lançamento inválido');
             }
+            
+            // Validar ano máximo
+            if (formData.releaseYear > currentYear + 10) {
+                throw new Error(`Ano não pode ser maior que ${currentYear + 10}`);
+            }
+            
+            // Validar tamanho da descrição
+            if (formData.description.length > 5000) {
+                throw new Error('A descrição é muito longa. Máximo: 5000 caracteres');
+            }
 
             // Comprimir imagem se necessário
             if (formData.imageFile && formData.imageFile.size > MAX_FILE_SIZE) {
                 try {
+                    console.log('[Add] 🖼️ Comprimindo imagem...');
                     formData.imageFile = await compressImage(formData.imageFile);
+                    console.log('[Add] ✅ Imagem comprimida');
                 } catch (error) {
                     console.error('[Add] Erro na compressão:', error);
                     throw new Error('Erro ao processar imagem');
                 }
             }
 
-            // Tentar criar o filme
+            // USAR o movieService do main.js
+            console.log('[Add] 🚀 Criando filme via movieService...');
             showNotification('Enviando dados...', 'info');
             const result = await movieService.createMovie(formData);
             
             if (result) {
-                console.log('[Add] Filme criado com sucesso:', result);
+                console.log('[Add] ✅ Filme criado com sucesso:', result);
                 showNotification('Filme adicionado com sucesso!', 'success');
                 
-                // Redirecionar após 2 segundos
+                // Redirecionar para detalhes do filme criado (melhor UX)
                 setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 2000);
+                    window.location.href = `movie-detail.html?id=${result.movie.id}`;
+                }, 1500);
+            } else {
+                throw new Error('Erro desconhecido ao criar filme');
             }
         } catch (error) {
-            console.error('[Add] Erro:', error);
+            console.error('[Add] ❌ Erro:', error);
             showNotification(
                 error.message || 'Erro ao adicionar filme. Tente novamente.',
                 'error'
@@ -256,15 +356,20 @@ const initAddMoviePage = async () => {
             }
         }
     });
+
+    console.log('[Add] ✅ Página de adição inicializada com sucesso!');
 };
 
-// Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[Add] DOM carregado, inicializando...');
-    initAddMoviePage().catch(error => {
+// Event listeners - AGUARDAR inicialização
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[Add] DOM carregado, aguardando inicialização do auth...');
+    
+    try {
+        await initAddMoviePage();
+    } catch (error) {
         console.error('[Add] Erro na inicialização:', error);
         showNotification('Erro ao carregar página', 'error');
-    });
+    }
 });
 
 // Exportar para uso em testes ou outros módulos

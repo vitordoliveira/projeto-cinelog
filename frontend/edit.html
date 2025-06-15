@@ -24,13 +24,11 @@
                             <input type="text" id="title" name="title" required>
                         </div>
                         
-                        <!-- Campo de diretor -->
                         <div class="form-group">
                             <label for="director">Diretor:</label>
                             <input type="text" id="director" name="director" placeholder="Ex: Christopher Nolan">
                         </div>
                         
-                        <!-- Campo de gênero -->
                         <div class="form-group">
                             <label for="genre">Gênero:</label>
                             <input type="text" id="genre" name="genre" placeholder="Ex: Ação, Drama, Comédia">
@@ -49,7 +47,6 @@
                     </div>
                     
                     <div class="form-column-right">
-                        <!-- Container para mostrar a imagem atual -->
                         <div id="current-image-container" class="current-image-container">
                             <!-- Será preenchido pelo JavaScript -->
                         </div>
@@ -73,270 +70,49 @@
         </div>
     </main>
 
-    <!-- Scripts -->
-    <script type="module" src="./js/utils.js"></script>
     <script type="module">
-        import { initializeNavbar } from './js/components.js';
-        document.addEventListener('DOMContentLoaded', initializeNavbar);
-    </script>
-    <script type="module" src="./js/auth.js"></script>
-    <script type="module">
-        import { movieService } from './js/main.js';
-        import { authService } from './js/auth.js';
-        import { showNotification } from './js/utils.js';
-        
-        // Variáveis globais
-        const movieId = new URLSearchParams(window.location.search).get('id');
-        const editForm = document.getElementById('edit-movie-form');
-        const backLink = document.getElementById('back-link');
-        const description = document.getElementById('description');
-        const charCounter = document.getElementById('char-counter');
-        const fileInput = document.getElementById('image');
-        const fileNameDisplay = document.getElementById('file-name');
-        let originalMovie = null; // Armazenar referência ao filme original
-        
-        // Garantir que todos os textareas não possam ser redimensionados
-        document.addEventListener('DOMContentLoaded', function() {
-            // Aplicar resize: none a todos os textareas na página
-            const allTextareas = document.querySelectorAll('textarea');
-            allTextareas.forEach(textarea => {
-                textarea.style.resize = 'none';
-            });
-            
-            // Garantir especificamente para o campo de descrição
-            if (description) {
-                description.style.resize = 'none';
-                // Evitar comportamento padrão em qualquer tentativa de redimensionar
-                description.addEventListener('mousedown', function(e) {
-                    // Verificar se o clique foi próximo ao canto inferior direito
-                    const rect = this.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    
-                    // Se o clique foi próximo ao canto, prevenir o comportamento padrão
-                    if (x > rect.width - 20 && y > rect.height - 20) {
-                        e.preventDefault();
-                    }
-                });
-            }
-        });
-        
-        // Mostrar nome do arquivo selecionado
-        if (fileInput && fileNameDisplay) {
-            fileInput.addEventListener('change', function() {
-                if (this.files && this.files.length > 0) {
-                    fileNameDisplay.textContent = this.files[0].name;
-                } else {
-                    fileNameDisplay.textContent = 'Nenhum arquivo selecionado';
-                }
-            });
-        }
-        
-        // Contador de caracteres para descrição
-        if (description && charCounter) {
-            description.addEventListener('input', function() {
-                const currentLength = this.value.length;
-                charCounter.textContent = `${currentLength} caracteres`;
-                
-                // Visualização do contador
-                if (currentLength > 2000) {
-                    charCounter.className = 'char-counter danger';
-                } else if (currentLength > 1500) {
-                    charCounter.className = 'char-counter warning';
-                } else {
-                    charCounter.className = 'char-counter';
-                }
-            });
-        }
-        
-        // Debug de inicialização
-        console.log('Carregando página de edição para filme ID:', movieId);
-        
-        // Redireciona para página de detalhe ao clicar em voltar
-        if (backLink) {
-            backLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                window.location.href = `movie-detail.html?id=${movieId}`;
-            });
-        }
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Verificar autenticação
-            setTimeout(() => {
-                if (!authService.isAuthenticated()) {
-                    showNotification('Você precisa estar logado para editar filmes.', 'error');
-                    localStorage.setItem('redirectTo', window.location.pathname + window.location.search);
-                    return window.location.href = './login.html';
-                }
-                
-                // Se não tiver ID na URL, redirecionar
-                if (!movieId) {
-                    showNotification('ID do filme não encontrado.', 'error');
-                    return window.location.href = './index.html';
-                }
-                
-                // Carregar dados do filme
-                loadMovieData();
-            }, 50);
-        });
-        
-        async function loadMovieData() {
+        const initializePage = async () => {
             try {
-                console.log('Carregando dados do filme ID:', movieId);
+                console.log('[Edit HTML] 🚀 Iniciando inicialização...');
                 
-                // Buscar detalhes do filme
-                const movie = await movieService.getMovieById(movieId);
-                if (!movie) {
-                    throw new Error('Filme não encontrado');
+                // Carregar módulos
+                const [utils, main, auth, components] = await Promise.all([
+                    import('./js/utils.js'),
+                    import('./js/main.js'),
+                    import('./js/auth.js'),
+                    import('./js/components.js')
+                ]);
+                
+                // Inicializar notification container
+                if (!document.getElementById('notification-container')) {
+                    const nc = document.createElement('div');
+                    nc.id = 'notification-container';
+                    document.body.prepend(nc);
                 }
                 
-                // Salvar referência ao filme original
-                originalMovie = movie;
+                // Inicializar AUTH
+                await auth.authService.initialize();
                 
-                console.log('Dados do filme carregados:', movie);
+                // Inicializar navbar
+                await components.initializeNavbar();
                 
-                // Preencher formulário com dados existentes
-                editForm.querySelector('#title').value = movie.title || '';
-                
-                // Preencher descrição e atualizar contador
-                const descElement = editForm.querySelector('#description');
-                descElement.value = movie.description || '';
-                
-                // Atualizar contador de caracteres
-                if (descElement && charCounter) {
-                    const currentLength = descElement.value.length;
-                    charCounter.textContent = `${currentLength} caracteres`;
-                    
-                    if (currentLength > 2000) {
-                        charCounter.className = 'char-counter danger';
-                    } else if (currentLength > 1500) {
-                        charCounter.className = 'char-counter warning';
-                    }
+                // Carregar e executar edit.js
+                const editModule = await import('./js/edit.js');
+                if (typeof editModule.initEditMoviePage === 'function') {
+                    await editModule.initEditMoviePage();
                 }
                 
-                editForm.querySelector('#releaseYear').value = movie.releaseYear || '';
-                editForm.querySelector('#director').value = movie.director || '';
-                editForm.querySelector('#genre').value = movie.genre || '';
-                
-                // Mostrar imagem atual se existir
-                const currentImageContainer = document.getElementById('current-image-container');
-                if (currentImageContainer) {
-                    if (movie.imageUrl) {
-                        currentImageContainer.innerHTML = `
-                            <p>Imagem Atual:</p>
-                            <img src="${movie.imageUrl}" alt="Imagem atual">
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="keepImage" name="keepImage" checked>
-                                <label for="keepImage">Manter esta imagem</label>
-                            </div>
-                            <div class="checkbox-group" style="display:none;">
-                                <input type="checkbox" id="clearImage" name="clearImage">
-                                <label for="clearImage">Remover imagem</label>
-                            </div>
-                        `;
-                        
-                        // Sincronizar checkboxes
-                        const keepImageCheckbox = document.getElementById('keepImage');
-                        const clearImageCheckbox = document.getElementById('clearImage');
-                        
-                        keepImageCheckbox.addEventListener('change', function() {
-                            clearImageCheckbox.checked = !this.checked;
-                        });
-                    } else {
-                        currentImageContainer.innerHTML = '<p>Nenhuma imagem cadastrada para este filme</p>';
-                    }
-                }
-                
-                // Configurar formulário
-                setupForm(movie);
+                console.log('[Edit HTML] ✅ Inicialização completa!');
                 
             } catch (error) {
-                console.error('Erro ao carregar filme:', error);
-                showNotification('Erro ao carregar dados do filme', 'error');
-                window.location.href = './index.html';
+                console.error('[Edit HTML] ❌ Erro na inicialização:', error);
             }
-        }
-        
-        function setupForm(movie) {
-            editForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const submitButton = editForm.querySelector('button[type="submit"]');
-                submitButton.disabled = true;
-                submitButton.textContent = 'Salvando...';
-                
-                try {
-                    const formData = new FormData(editForm);
-                    const keepImage = document.getElementById('keepImage')?.checked;
-                    const clearImage = document.getElementById('clearImage')?.checked;
-                    const imageFile = formData.get('image');
-                    
-                    // Validação de campos obrigatórios
-                    const title = formData.get('title')?.trim();
-                    const description = formData.get('description')?.trim();
-                    const releaseYear = formData.get('releaseYear');
-                    
-                    if (!title || !description || !releaseYear) {
-                        showNotification('Preencha todos os campos obrigatórios', 'error');
-                        submitButton.disabled = false;
-                        submitButton.textContent = 'Salvar Alterações';
-                        return;
-                    }
-                    
-                    // Verificar se a descrição é muito longa
-                    if (description.length > 5000) {
-                        showNotification('A descrição é muito longa. Por favor, reduza o texto.', 'error');
-                        submitButton.disabled = false;
-                        submitButton.textContent = 'Salvar Alterações';
-                        return;
-                    }
-                    
-                    // Construir objeto para atualização
-                    const movieData = {
-                        id: movie.id,
-                        title: title,
-                        description: description,
-                        releaseYear: parseInt(releaseYear),
-                        director: formData.get('director')?.trim() || "",
-                        genre: formData.get('genre')?.trim() || "",
-                    };
-                    
-                    // Adicionar informações da imagem
-                    if (imageFile && imageFile.size > 0) {
-                        // Se enviou nova imagem, usá-la
-                        movieData.imageFile = imageFile;
-                        console.log('Usando nova imagem enviada');
-                    } else if (clearImage) {
-                        // Se pediu para remover a imagem
-                        movieData.clearImage = true;
-                        console.log('Removendo imagem atual');
-                    } else if (keepImage && movie.imageUrl) {
-                        // Se pediu para manter a imagem atual
-                        movieData.keepExistingImage = true;
-                        console.log('Mantendo imagem atual');
-                    }
-                    
-                    console.log('Enviando dados para atualização:', movieData);
-                    
-                    // Chamar serviço para atualizar
-                    const updatedMovie = await movieService.updateMovie(movieData);
-                    
-                    console.log('Filme atualizado com sucesso:', updatedMovie);
-                    showNotification('Filme atualizado com sucesso!', 'success');
-                    
-                    // Redirecionar de volta para a página de detalhes
-                    setTimeout(() => {
-                        window.location.href = `movie-detail.html?id=${movieId}`;
-                    }, 1500);
-                    
-                } catch (error) {
-                    console.error('Erro ao atualizar filme:', error);
-                    showNotification('Erro ao atualizar filme. Tente novamente.', 'error');
-                } finally {
-                    submitButton.disabled = false;
-                    submitButton.textContent = 'Salvar Alterações';
-                }
-            });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
         }
     </script>
 </body>
