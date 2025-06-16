@@ -4,6 +4,18 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Configurações de cookie consistentes
+const getCookieOptions = (maxAge) => {
+  return {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax', // Consistente com login
+    path: '/',
+    maxAge,
+    domain: undefined
+  };
+};
+
 const verifyToken = async (token, secret) => {
   try {
     return jwt.verify(token, secret, { ignoreExpiration: false });
@@ -106,9 +118,9 @@ export const auth = async (req, res, next) => {
 
       if (!storedRefreshToken || !storedRefreshToken.user.isActive) {
         // Limpar cookies inválidos
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
-        res.clearCookie('sessionId');
+        res.clearCookie('accessToken', getCookieOptions(0));
+        res.clearCookie('refreshToken', getCookieOptions(0));
+        res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
         
         return res.status(401).json({ 
           error: 'Refresh token inválido',
@@ -131,9 +143,9 @@ export const auth = async (req, res, next) => {
         });
 
         // Limpar cookies inválidos
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
-        res.clearCookie('sessionId');
+        res.clearCookie('accessToken', getCookieOptions(0));
+        res.clearCookie('refreshToken', getCookieOptions(0));
+        res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
 
         return res.status(401).json({ 
           error: 'Sessão inválida',
@@ -152,14 +164,7 @@ export const auth = async (req, res, next) => {
       );
 
       // DEFINIR NOVO ACCESS TOKEN EM COOKIE
-      const isProduction = process.env.NODE_ENV === 'production';
-      res.cookie('accessToken', newAccessToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
-        maxAge: 15 * 60 * 1000, // 15 minutos
-        path: '/'
-      });
+      res.cookie('accessToken', newAccessToken, getCookieOptions(15 * 60 * 1000));
 
       // Também incluir no header para compatibilidade
       res.setHeader('X-New-Access-Token', newAccessToken);
@@ -179,9 +184,9 @@ export const auth = async (req, res, next) => {
 
       if (!sessionValid) {
         // Limpar cookies inválidos
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
-        res.clearCookie('sessionId');
+        res.clearCookie('accessToken', getCookieOptions(0));
+        res.clearCookie('refreshToken', getCookieOptions(0));
+        res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
         
         return res.status(401).json({ 
           error: 'Sessão inválida',
@@ -205,9 +210,9 @@ export const auth = async (req, res, next) => {
 
       if (!user || !user.isActive) {
         // Limpar cookies para usuário inválido
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
-        res.clearCookie('sessionId');
+        res.clearCookie('accessToken', getCookieOptions(0));
+        res.clearCookie('refreshToken', getCookieOptions(0));
+        res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
         
         return res.status(401).json({ 
           error: 'Usuário não encontrado ou inativo',
@@ -219,9 +224,9 @@ export const auth = async (req, res, next) => {
       req.sessionId = decoded.sessionId;
     } else {
       // Nem access token nem refresh token válidos
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
-      res.clearCookie('sessionId');
+      res.clearCookie('accessToken', getCookieOptions(0));
+      res.clearCookie('refreshToken', getCookieOptions(0));
+      res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
       
       return res.status(401).json({ 
         error: 'Tokens inválidos',
@@ -243,9 +248,9 @@ export const auth = async (req, res, next) => {
     console.error('❌ Auth Middleware Error:', err);
     
     // Limpar cookies em caso de erro
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
-    res.clearCookie('sessionId');
+    res.clearCookie('accessToken', getCookieOptions(0));
+    res.clearCookie('refreshToken', getCookieOptions(0));
+    res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
     
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ 

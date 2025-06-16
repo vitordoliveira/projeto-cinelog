@@ -13,6 +13,20 @@ const generateRefreshToken = () => {
   return crypto.randomBytes(40).toString('hex');
 };
 
+// Configurações de cookie consistentes
+const getCookieOptions = (maxAge) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  return {
+    httpOnly: true,
+    secure: false, // Sempre false em desenvolvimento local
+    sameSite: 'lax', // Mudado de 'strict' para 'lax' para melhor compatibilidade
+    path: '/',
+    maxAge,
+    domain: undefined // Não definir domain para localhost
+  };
+};
+
 // Função para criar nova sessão
 const createSession = async (userId, req) => {
   const deviceInfo = req.headers['user-agent'] || 'unknown';
@@ -95,38 +109,18 @@ export default asyncHandler(async (req, res) => {
     // 4. Gerar refresh token (validade longa - 30 dias)
     const refreshToken = await createRefreshToken(user.id, session.id);
 
-    // 5. Configurar cookies HttpOnly - CONFIGURAÇÃO CORRGIDA
-    const isProduction = process.env.NODE_ENV === 'production';
+    // 5. Configurar cookies HttpOnly com opções consistentes
     
-    // Configurações de cookie mais permissivas para desenvolvimento
-    const cookieOptions = {
-      httpOnly: true,
-      secure: false, // Sempre false em desenvolvimento local
-      sameSite: 'strict', // Mais restritivo, mas funciona melhor localmente
-      path: '/',
-      domain: undefined // Não definir domain para localhost
-    };
-
     // Cookie para access token (15 minutos)
-    res.cookie('accessToken', accessToken, {
-      ...cookieOptions,
-      maxAge: 15 * 60 * 1000 // 15 minutos em ms
-    });
+    res.cookie('accessToken', accessToken, getCookieOptions(15 * 60 * 1000));
 
     // Cookie para refresh token (30 dias)
-    res.cookie('refreshToken', refreshToken, {
-      ...cookieOptions,
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 dias em ms
-    });
+    res.cookie('refreshToken', refreshToken, getCookieOptions(30 * 24 * 60 * 60 * 1000));
 
     // Cookie para session ID (frontend pode ler)
     res.cookie('sessionId', session.id, {
-      httpOnly: false, // Frontend pode ler este
-      secure: false,
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 dias em ms
-      path: '/',
-      domain: undefined
+      ...getCookieOptions(30 * 24 * 60 * 60 * 1000),
+      httpOnly: false // Frontend pode ler este
     });
 
     // 6. Remover dados sensíveis do usuário
@@ -150,7 +144,6 @@ export default asyncHandler(async (req, res) => {
     // 8. Log da sessão
     console.log(`✅ Nova sessão criada: ID ${session.id} para usuário ${user.id} (${user.email})`);
     console.log(`🍪 Cookies definidos para sessão ${session.id}`);
-    console.log(`🍪 Cookie options:`, cookieOptions);
 
   } catch (error) {
     // Em caso de erro, garantir que nenhuma sessão ou token fique pendurado
@@ -164,9 +157,9 @@ export default asyncHandler(async (req, res) => {
     }
 
     // Limpar cookies em caso de erro
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
-    res.clearCookie('sessionId');
+    res.clearCookie('accessToken', getCookieOptions(0));
+    res.clearCookie('refreshToken', getCookieOptions(0));
+    res.clearCookie('sessionId', { ...getCookieOptions(0), httpOnly: false });
 
     res.status(500).json({ 
       error: 'Erro ao processar login',

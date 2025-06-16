@@ -404,14 +404,30 @@ export const authService = {
     if (!this.isAuthenticated()) return false;
     
     try {
-      const response = await fetchWithAuth(`${API}/users/logout-all`, {
-        method: 'POST'
+      const response = await fetchWithAuth(`${API}/users/sessions`, {
+        method: 'DELETE'
       });
       
       if (!response.ok) throw new Error('Falha ao encerrar todas as sessões');
       
-      // Fazer logout local após encerrar todas as sessões
-      await this.logout();
+      // MUDANÇA: Não chamar logout(), fazer limpeza direta
+      // pois a sessão já foi invalidada no servidor
+      console.log('[Terminate All] Limpeza local após encerramento de todas as sessões...');
+      
+      // Limpeza local
+      localStorage.removeItem('user_data');
+      localStorage.removeItem('auth');
+      
+      authState.currentUser = null;
+      authState.sessionId = null;
+      authState.deviceInfo = null;
+      authState.isAuthenticated = false;
+
+      window.dispatchEvent(new Event('auth-state-changed'));
+      showNotification('Todas as sessões foram encerradas', 'success');
+      this.updateAuthUI();
+      window.location.href = 'login.html';
+      
       return true;
     } catch (error) {
       console.error('[Terminate All Sessions Error]', error);
